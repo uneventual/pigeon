@@ -1,0 +1,7 @@
+[package]
+name = "bro"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crow = { version = "0.1.0", path = "../crow" }
