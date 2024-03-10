@@ -10,3 +10,5 @@ proc-macro = true
 
 [dependencies]
 itertools = "0.12.1"
+proc-macro2 = "1.0.78"
+quote = "1.0.35"

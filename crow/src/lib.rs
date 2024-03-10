@@ -1,9 +1,14 @@
 #![feature(iter_intersperse)]
 extern crate proc_macro;
-use proc_macro::{Delimiter, Group, Ident, Literal, Punct, Span, TokenStream, TokenTree};
+use proc_macro2::{token_stream::TokenStream, Delimiter, Group, Literal, TokenTree};
+use quote::{format_ident, quote, ToTokens};
 
 #[proc_macro]
-pub fn crow(ts: TokenStream) -> TokenStream {
+pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    proc_macro::TokenStream::from(crow2(TokenStream::from(ts)))
+}
+
+fn crow2(ts: TokenStream) -> TokenStream {
     if let Some(TokenTree::Group(root)) = ts.into_iter().next() {
         let ast = to_ast(root);
 
@@ -35,77 +40,38 @@ pub fn crow(ts: TokenStream) -> TokenStream {
             stream.extend(letline(ev, i));
         }
 
-        stream.extend(vec![TokenTree::Ident(Ident::new(
-            &usize_name(0),
-            Span::call_site(),
-        ))]);
-        let mut return_stream = TokenStream::new();
+        stream.extend(usize_name(0));
 
-        return_stream.extend(vec![TokenTree::Group(Group::new(Delimiter::Brace, stream))]);
-        return_stream
+        let ret = quote!({ #stream });
+
+        ret
     } else {
         panic!()
     }
 }
 
-fn usize_name(v: usize) -> String {
-    format!("__{}", v)
+fn letline(ev: Evaluable, num: usize) -> TokenStream {
+    let noname = usize_name(num);
+    quote!(let #noname = #ev ;)
 }
 
-fn letline(ev: Evaluable, num: usize) -> Vec<TokenTree> {
-    let prelude = vec![
-        TokenTree::Ident(proc_macro::Ident::new("let", proc_macro::Span::call_site())),
-        TokenTree::Ident(proc_macro::Ident::new(
-            &usize_name(num),
-            proc_macro::Span::call_site(),
-        )),
-        TokenTree::Punct(proc_macro::Punct::new('=', proc_macro::Spacing::Alone)),
-    ];
-
-    let val = match ev {
-        Evaluable::Func(f) => funcfrom(f),
-        Evaluable::Ident(s) => vec![TokenTree::Ident(Ident::new(&s, Span::call_site()))],
-        Evaluable::Literal(l) => vec![TokenTree::Literal(l)],
-        Evaluable::Stat(s) => vec![TokenTree::Ident(Ident::new(
-            &usize_name(s),
-            Span::call_site(),
-        ))],
-    };
-
-    let postlude = vec![TokenTree::Punct(proc_macro::Punct::new(
-        ';',
-        proc_macro::Spacing::Alone,
-    ))];
-
-    vec![prelude, val, postlude].into_iter().flatten().collect()
+fn to_valids(ev: &Evaluable) -> Option<ValId> {
+    match ev {
+        Evaluable::Stat(valid) => Some(*valid),
+        _ => None,
+    }
 }
 
-fn to_valids(args: Vec<Evaluable>) -> Vec<ValId> {
-    args.into_iter()
-        .filter_map(|ev| match ev {
-            Evaluable::Stat(valid) => Some(valid),
-            _ => None,
-        })
-        .collect()
+fn funcfrom(func: &Func) -> TokenStream {
+    let args = func.args.iter().filter_map(to_valids).map(usize_name);
+    let name = format_ident!("{}", func.name);
+    let quo = quote!(#name(#(#args),*));
+    quo
 }
 
-fn funcfrom(func: Func) -> Vec<TokenTree> {
-    let args = to_valids(func.args);
-    vec![
-        TokenTree::Ident(proc_macro::Ident::new(
-            &func.name,
-            proc_macro::Span::call_site(),
-        )),
-        TokenTree::Group(Group::new(Delimiter::Parenthesis, commasep(args))),
-    ]
-}
-
-fn commasep(vals: Vec<usize>) -> TokenStream {
-    let comma = TokenTree::Punct(Punct::new(',', proc_macro::Spacing::Alone));
-    vals.into_iter()
-        .map(|s| TokenTree::Ident(Ident::new(&usize_name(s), proc_macro::Span::call_site())))
-        .intersperse(comma)
-        .collect()
+fn usize_name(id: usize) -> TokenStream {
+    let idf = format_ident!("__{}", id);
+    quote!(#idf)
 }
 
 fn to_ast(group: Group) -> Evaluable {
@@ -138,6 +104,18 @@ enum Evaluable {
     Ident(String),
     Literal(Literal),
     Stat(ValId),
+}
+
+impl ToTokens for Evaluable {
+    fn to_tokens(&self, stream: &mut proc_macro2::TokenStream) {
+        let toks = match self {
+            Evaluable::Func(f) => funcfrom(f),
+            Evaluable::Ident(s) => quote!(#s),
+            Evaluable::Literal(l) => quote!(#l),
+            Evaluable::Stat(s) => usize_name(*s),
+        };
+        stream.extend(toks);
+    }
 }
 
 #[derive(Clone, Debug)]
