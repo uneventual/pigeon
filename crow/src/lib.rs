@@ -1,6 +1,7 @@
-#![feature(iter_intersperse)]
 extern crate proc_macro;
-use proc_macro2::{token_stream::TokenStream, Delimiter, Group, Literal, TokenTree};
+use anyhow::{anyhow, Context, Result};
+use itertools::Itertools;
+use proc_macro2::{token_stream::TokenStream, Delimiter, Group, Literal, Punct, TokenTree};
 use quote::{format_ident, quote, ToTokens};
 
 #[proc_macro]
@@ -10,7 +11,7 @@ pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 fn crow2(ts: TokenStream) -> TokenStream {
     if let Some(TokenTree::Group(root)) = ts.into_iter().next() {
-        let ast = to_ast(root);
+        let ast = paren_to_ast(root);
 
         let mut bfs = vec![ast];
 
@@ -74,19 +75,117 @@ fn usize_name(id: usize) -> TokenStream {
     quote!(#idf)
 }
 
-fn to_ast(group: Group) -> Evaluable {
+// todo:
+// - qualified names
+// - +/-*
+// - references
+// -- just carry through as part of ident ig
+// - defn
+// - quote/reflection/etc
+// - go down list of clojure features
+// - use blocks
+
+// 1. defn
+// 2. let blocks
+
+fn defn_ast(group: Group) -> Result<Evaluable> {
+    let ivs = Err(anyhow::anyhow!(
+        "Invalid syntax: let block requires [variable definition]"
+    ));
+    // let mut st = group.stream().into_iter().skip(1);
+    // if let Some(TokenTree::Group(assignments)) = st.next() {
+    //     if assignments.delimiter() == Delimiter::Bracket {
+    //         let mut as_st = assignments.stream().into_iter().chunks(2).into_iter();
+
+    //         let mut vv: Vec<(String, Evaluable)> = vec![];
+
+    //         for mut c in as_st {
+    //             let uneven = "uneven number of args to let block";
+    //             let name = c.next().context(uneven)?;
+    //             let mut type_name = c.next().context(uneven)?;
+
+    //             if let TokenTree::Punct(pt) = type_name {}
+
+    //             match name {
+    //                 TokenTree::Ident(s) => vv.push((s.to_string(), any_evaluable(value).unwrap())),
+    //                 _ => return ivs,
+    //             };
+    //         }
+
+    //         let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
+
+    //         let block = LetBlock {
+    //             assignments: vv,
+    //             body: evvec,
+    //         };
+
+    //         return Ok(Evaluable::LetBlock(block));
+    //     }
+    // }
+    ivs
+}
+
+fn let_ast(group: Group) -> Result<Evaluable> {
+    let ivs = Err(anyhow::anyhow!(
+        "Invalid syntax: let block requires [variable definition]"
+    ));
+    let mut st = group.stream().into_iter().skip(1);
+    if let Some(TokenTree::Group(assignments)) = st.next() {
+        if assignments.delimiter() == Delimiter::Bracket {
+            let as_st = assignments.stream().into_iter().chunks(2);
+
+            let mut vv: Vec<LetAssignment> = vec![];
+
+            for mut c in as_st.into_iter() {
+                let uneven = "uneven number of args to let block";
+                let name = c.next().context(uneven)?;
+                let value = c.next().context(uneven)?;
+                match name {
+                    TokenTree::Ident(s) => vv.push(LetAssignment {
+                        name: s.to_string(),
+                        val: any_evaluable(value).unwrap(),
+                    }),
+                    _ => return ivs,
+                };
+            }
+
+            let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
+
+            let block = LetBlock {
+                assignments: vv,
+                body: evvec,
+            };
+
+            return Ok(Evaluable::LetBlock(block));
+        }
+    }
+    ivs
+}
+
+fn any_evaluable(tt: TokenTree) -> Result<Evaluable> {
+    let ev = match tt {
+        TokenTree::Group(g) => paren_to_ast(g),
+        TokenTree::Ident(id) => Evaluable::Ident(id.to_string()),
+        TokenTree::Punct(_) => panic!(),
+        TokenTree::Literal(l) => Evaluable::Literal(l),
+    };
+
+    Ok(ev)
+}
+
+fn paren_to_ast(group: Group) -> Evaluable {
     assert!(group.delimiter() == Delimiter::Parenthesis);
     let mut st = group.stream().into_iter();
     if let Some(TokenTree::Ident(name)) = st.next() {
         let name_st = name.to_string();
-        let evvec: Vec<Evaluable> = st
-            .map(|m| match m {
-                TokenTree::Group(g) => to_ast(g),
-                TokenTree::Ident(id) => Evaluable::Ident(id.to_string()),
-                TokenTree::Punct(_) => panic!(),
-                TokenTree::Literal(l) => Evaluable::Literal(l),
-            })
-            .collect();
+
+        match name_st.as_str() {
+            "defn" => return defn_ast(group).context("defn arm").unwrap(),
+            "let" => return let_ast(group).context("let arm").unwrap(),
+            _ => (),
+        }
+
+        let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
         Evaluable::Func(Func {
             name: name_st,
             args: evvec,
@@ -96,7 +195,58 @@ fn to_ast(group: Group) -> Evaluable {
     }
 }
 
+// quote v1: provide vecdeque literals and function literals
+// quote v2: something something runtime dynamism
+
+fn scratch() {
+    let plus = |a: i32, b: i32| a + b;
+    let minus = |a: i32, b: i32| a - b;
+    let a = 3;
+    let b = 4;
+    let v = match false {
+        true => plus(a, b),
+        false => minus(a, b),
+    };
+}
+
+// what do we need here to make it actually work?
+// uh parse imports, types, lifetimes
+// be able to declare functions
+
 type ValId = usize;
+
+#[derive(Clone, Debug)]
+struct FuncDef {
+    name: String,
+    args: Vec<FuncArg>,
+    body: Box<Evaluable>,
+    resulttype: String,
+}
+
+#[derive(Clone, Debug)]
+struct FuncArg {
+    typename: String,
+    name: String,
+}
+
+#[derive(Clone, Debug)]
+struct LetBlock {
+    assignments: Vec<LetAssignment>,
+    body: Vec<Evaluable>,
+}
+
+#[derive(Clone, Debug)]
+struct LetAssignment {
+    name: String,
+    val: Evaluable,
+}
+
+impl ToTokens for LetAssignment {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let quote = quote!(let #self.name = #self.val);
+        tokens.extend(quote);
+    }
+}
 
 #[derive(Clone, Debug)]
 enum Evaluable {
@@ -104,6 +254,39 @@ enum Evaluable {
     Ident(String),
     Literal(Literal),
     Stat(ValId),
+    FuncDef(FuncDef),
+    LetBlock(LetBlock),
+}
+
+impl ToTokens for FuncArg {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let quote = quote!(#self.name, #self.typename);
+
+        tokens.extend(quote);
+    }
+}
+
+fn funcdef(fd: &FuncDef) -> TokenStream {
+    let body = fd.body.as_ref();
+    let args = fd.args.iter();
+    let name = &fd.name;
+    let result = &fd.resulttype;
+
+    quote!(fn #name(#(#args),*) -> #result {
+        #body
+    })
+}
+
+fn letblock(lb: &LetBlock) -> TokenStream {
+    let body = &lb.body;
+    let blocks = &lb.assignments;
+
+    quote!(
+        {
+            #(#blocks)*
+            #(#body)*
+        }
+    )
 }
 
 impl ToTokens for Evaluable {
@@ -113,6 +296,8 @@ impl ToTokens for Evaluable {
             Evaluable::Ident(s) => quote!(#s),
             Evaluable::Literal(l) => quote!(#l),
             Evaluable::Stat(s) => usize_name(*s),
+            Evaluable::FuncDef(f) => funcdef(f),
+            Evaluable::LetBlock(l) => letblock(l),
         };
         stream.extend(toks);
     }
