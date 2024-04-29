@@ -1,7 +1,7 @@
 extern crate proc_macro;
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
-use proc_macro2::{token_stream::TokenStream, Delimiter, Group, Literal, Punct, TokenTree};
+use proc_macro2::{token_stream::TokenStream, Delimiter, Group, Ident, Literal, Punct, TokenTree};
 use quote::{format_ident, quote, ToTokens};
 
 #[proc_macro]
@@ -12,43 +12,50 @@ pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn crow2(ts: TokenStream) -> TokenStream {
     if let Some(TokenTree::Group(root)) = ts.into_iter().next() {
         let ast = paren_to_ast(root);
-
-        let mut bfs = vec![ast];
-
-        let mut i: usize = 0;
-        while i < bfs.len() {
-            let mut bv = {
-                let mut addr = bfs.len();
-                let b = &mut bfs[i];
-                let mut bv: Vec<Evaluable> = vec![];
-                if let Evaluable::Func(func) = b {
-                    for arg in func.args.iter_mut() {
-                        bv.push(arg.clone());
-                        *arg = Evaluable::Stat(addr);
-                        addr += 1;
-                    }
-                };
-                bv
-            };
-
-            bfs.append(&mut bv);
-            i += 1;
-        }
-
-        let mut stream = TokenStream::new();
-
-        for (i, ev) in bfs.into_iter().enumerate().rev() {
-            stream.extend(letline(ev, i));
-        }
-
-        stream.extend(usize_name(0));
-
-        let ret = quote!({ #stream });
-
-        ret
+        ssa_block(ast)
     } else {
         panic!()
     }
+}
+
+fn ssa_block(ast: Evaluable) -> TokenStream {
+    eprintln!("{:?}", ast);
+    let mut bfs = vec![ast];
+
+    let mut i: usize = 0;
+    while i < bfs.len() {
+        let mut bv = {
+            let mut addr = bfs.len();
+            let b = &mut bfs[i];
+            let mut bv: Vec<Evaluable> = vec![];
+            if let Evaluable::Func(func) = b {
+                for arg in func.args.iter_mut() {
+                    bv.push(arg.clone());
+                    *arg = Evaluable::Stat(ValId::Reference(addr));
+                    addr += 1;
+                }
+            };
+            // probably we want to put this in the letblock function actually
+
+            bv
+        };
+
+        bfs.append(&mut bv);
+        i += 1;
+    }
+
+    let mut stream = TokenStream::new();
+
+    eprintln!("{:?}", bfs);
+    for (i, ev) in bfs.into_iter().enumerate().rev() {
+        stream.extend(letline(ev, i));
+    }
+
+    stream.extend(usize_name(0));
+
+    let ret = quote!({ #stream });
+
+    ret
 }
 
 fn letline(ev: Evaluable, num: usize) -> TokenStream {
@@ -57,17 +64,31 @@ fn letline(ev: Evaluable, num: usize) -> TokenStream {
 }
 
 fn to_valids(ev: &Evaluable) -> Option<ValId> {
-    match ev {
-        Evaluable::Stat(valid) => Some(*valid),
+    eprintln!("{:?}", ev);
+    let x = match ev {
+        Evaluable::Stat(valid) => Some(valid.clone()),
+        Evaluable::Ident(st) => Some(ValId::Ident(format_ident!("{}", st))),
         _ => None,
-    }
+    };
+    eprintln!("{:?}", x);
+    x
 }
 
 fn funcfrom(func: &Func) -> TokenStream {
-    let args = func.args.iter().filter_map(to_valids).map(usize_name);
+    let args = func.args.iter().filter_map(to_valids);
     let name = format_ident!("{}", func.name);
     let quo = quote!(#name(#(#args),*));
     quo
+}
+
+impl ToTokens for ValId {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let tok = match self {
+            Self::Ident(id) => quote!(#id),
+            Self::Reference(r) => usize_name(*r),
+        };
+        tokens.extend(tok);
+    }
 }
 
 fn usize_name(id: usize) -> TokenStream {
@@ -126,40 +147,40 @@ fn defn_ast(group: Group) -> Result<Evaluable> {
 }
 
 fn let_ast(group: Group) -> Result<Evaluable> {
-    let ivs = Err(anyhow::anyhow!(
+    let syn_error = Err(anyhow::anyhow!(
         "Invalid syntax: let block requires [variable definition]"
     ));
-    let mut st = group.stream().into_iter().skip(1);
-    if let Some(TokenTree::Group(assignments)) = st.next() {
+    let mut after_let = group.stream().into_iter().skip(1);
+    if let Some(TokenTree::Group(assignments)) = after_let.next() {
         if assignments.delimiter() == Delimiter::Bracket {
-            let as_st = assignments.stream().into_iter().chunks(2);
+            let assignments_stream = assignments.stream().into_iter().chunks(2);
 
-            let mut vv: Vec<LetAssignment> = vec![];
+            let mut assignments_vector: Vec<LetAssignment> = vec![];
 
-            for mut c in as_st.into_iter() {
+            for mut c in assignments_stream.into_iter() {
                 let uneven = "uneven number of args to let block";
                 let name = c.next().context(uneven)?;
                 let value = c.next().context(uneven)?;
                 match name {
-                    TokenTree::Ident(s) => vv.push(LetAssignment {
+                    TokenTree::Ident(s) => assignments_vector.push(LetAssignment {
                         name: s.to_string(),
                         val: any_evaluable(value).unwrap(),
                     }),
-                    _ => return ivs,
+                    _ => return syn_error,
                 };
             }
 
-            let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
+            let evaluables: Vec<Evaluable> = after_let.map(|m| any_evaluable(m).unwrap()).collect();
 
             let block = LetBlock {
-                assignments: vv,
-                body: evvec,
+                assignments: assignments_vector,
+                body: evaluables,
             };
 
             return Ok(Evaluable::LetBlock(block));
         }
     }
-    ivs
+    syn_error
 }
 
 fn any_evaluable(tt: TokenTree) -> Result<Evaluable> {
@@ -212,8 +233,11 @@ fn scratch() {
 // what do we need here to make it actually work?
 // uh parse imports, types, lifetimes
 // be able to declare functions
-
-type ValId = usize;
+#[derive(Clone, Debug)]
+enum ValId {
+    Reference(usize),
+    Ident(proc_macro2::Ident),
+}
 
 #[derive(Clone, Debug)]
 struct FuncDef {
@@ -243,7 +267,9 @@ struct LetAssignment {
 
 impl ToTokens for LetAssignment {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let quote = quote!(let #self.name = #self.val);
+        let name = format_ident!("{}", self.name);
+        let val = &self.val;
+        let quote = quote!(let #name = #val;);
         tokens.extend(quote);
     }
 }
@@ -256,11 +282,14 @@ enum Evaluable {
     Stat(ValId),
     FuncDef(FuncDef),
     LetBlock(LetBlock),
+    TokenBlock(TokenStream),
 }
 
 impl ToTokens for FuncArg {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let quote = quote!(#self.name, #self.typename);
+        let name = &self.name;
+        let typename = &self.typename;
+        let quote = quote!(#name: #typename);
 
         tokens.extend(quote);
     }
@@ -278,26 +307,27 @@ fn funcdef(fd: &FuncDef) -> TokenStream {
 }
 
 fn letblock(lb: &LetBlock) -> TokenStream {
-    let body = &lb.body;
-    let blocks = &lb.assignments;
+    let body = lb.body.clone().into_iter().map(ssa_block);
+    let mut blocks = lb.assignments.iter();
 
-    quote!(
-        {
-            #(#blocks)*
-            #(#body)*
-        }
-    )
+    let mut last_b: Option<Evaluable> = None;
+
+    quote!({ #(#blocks)*  { #(#body)* } };)
 }
 
 impl ToTokens for Evaluable {
     fn to_tokens(&self, stream: &mut proc_macro2::TokenStream) {
         let toks = match self {
             Evaluable::Func(f) => funcfrom(f),
-            Evaluable::Ident(s) => quote!(#s),
+            Evaluable::Ident(s) => {
+                let id = format_ident!("{}", s);
+                quote!(#id)
+            }
             Evaluable::Literal(l) => quote!(#l),
-            Evaluable::Stat(s) => usize_name(*s),
+            Evaluable::Stat(s) => quote!(#s),
             Evaluable::FuncDef(f) => funcdef(f),
             Evaluable::LetBlock(l) => letblock(l),
+            Evaluable::TokenBlock(t) => t.clone(),
         };
         stream.extend(toks);
     }
