@@ -226,33 +226,6 @@ fn paren_to_ast(group: Group) -> Evaluable {
     }
 }
 
-// quote v1: provide vecdeque literals and function literals
-// quote v2: something something runtime dynamism
-
-// fn scratch() {
-//     let plus = |a: i32, b: i32| a + b;
-//     let minus = |a: i32, b: i32| a - b;
-//     let a = 3;
-//     let b = 4;
-//     let v = match false {
-//         true => plus(a, b),
-//         false => minus(a, b),
-//     };
-// }
-
-// // quote v1: provide vecdeque literals and function literals
-// // quote v2: something something runtime dynamism
-
-// fn scratch() {
-//     let plus = |a: i32, b: i32| a + b;
-//     let minus = |a: i32, b: i32| a - b;
-//     let a = 3;
-//     let b = 4;
-//     let v = match false {
-//         true => plus(a, b),
-//         false => minus(a, b),
-//     };
-// }
 
 // what do we need here to make it actually work?
 // uh parse imports, types, lifetimes
