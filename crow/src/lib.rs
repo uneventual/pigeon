@@ -202,6 +202,9 @@ fn let_ast(group: Group) -> Result<Evaluable> {
 fn functype_ast(group: Group) -> Result<Evaluable> {
     let funcerr = anyhow!("couldn't parse functype definition");
 
+    group.
+
+
 
     Err(funcerr)
 }
