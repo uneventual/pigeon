@@ -119,40 +119,45 @@ fn usize_name(id: usize) -> TokenStream {
 // 1. defn
 // 2. let blocks
 
+
+// function signature is defined like (-> arg1 arg2 arg3 return)
+
+
 fn defn_ast(group: Group) -> Result<Evaluable> {
     let ivs = Err(anyhow::anyhow!(
         "Invalid syntax: let block requires [variable definition]"
     ));
-    // let mut st = group.stream().into_iter().skip(1);
-    // if let Some(TokenTree::Group(assignments)) = st.next() {
-    //     if assignments.delimiter() == Delimiter::Bracket {
-    //         let mut as_st = assignments.stream().into_iter().chunks(2).into_iter();
+    let mut st = group.stream().into_iter().skip(1);
 
-    //         let mut vv: Vec<(String, Evaluable)> = vec![];
+    let name = match st.next().context("function needs a name")? {
+        TokenTree::Ident(n) => Some(n),
+        _ => None 
+    }.context("function needs a name")?.to_string();
 
-    //         for mut c in as_st {
-    //             let uneven = "uneven number of args to let block";
-    //             let name = c.next().context(uneven)?;
-    //             let mut type_name = c.next().context(uneven)?;
+    if let Some(TokenTree::Group(assignments)) = st.next() {
+        if assignments.delimiter() == Delimiter::Bracket {
+            let mut as_st = assignments.stream().into_iter();
 
-    //             if let TokenTree::Punct(pt) = type_name {}
+            let mut vv: Vec<(String, Evaluable)> = vec![];
 
-    //             match name {
-    //                 TokenTree::Ident(s) => vv.push((s.to_string(), any_evaluable(value).unwrap())),
-    //                 _ => return ivs,
-    //             };
-    //         }
+            let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
 
-    //         let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
+            let defn = FuncDef {
+                name,
+                args,
+                body: evvec,
+                resulttype,
 
-    //         let block = LetBlock {
-    //             assignments: vv,
-    //             body: evvec,
-    //         };
+            } 
 
-    //         return Ok(Evaluable::LetBlock(block));
-    //     }
-    // }
+            let block = LetBlock {
+                assignments: vv,
+                body: evvec,
+            };
+
+            return Ok(Evaluable::LetBlock(block));
+        }
+    }
     ivs
 }
 
@@ -193,6 +198,14 @@ fn let_ast(group: Group) -> Result<Evaluable> {
     syn_error
 }
 
+
+fn functype_ast(group: Group) -> Result<Evaluable> {
+    let funcerr = anyhow!("couldn't parse functype definition");
+
+
+    Err(funcerr)
+}
+
 fn any_evaluable(tt: TokenTree) -> Result<Evaluable> {
     let ev = match tt {
         TokenTree::Group(g) => paren_to_ast(g),
@@ -213,6 +226,7 @@ fn paren_to_ast(group: Group) -> Evaluable {
         match name_st.as_str() {
             "defn" => return defn_ast(group).context("defn arm").unwrap(),
             "let" => return let_ast(group).context("let arm").unwrap(),
+            "->" => return functype_ast(group).context("-> arm").unwrap(),
             _ => (),
         }
 
@@ -240,7 +254,7 @@ enum ValId {
 struct FuncDef {
     name: String,
     args: Vec<FuncArg>,
-    body: Box<Evaluable>,
+    body: Vec<Evaluable>,
     resulttype: String,
 }
 
