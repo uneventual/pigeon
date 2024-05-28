@@ -3,6 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use proc_macro2::{token_stream::{IntoIter, TokenStream}, Delimiter, Group, Ident, Literal, Punct, TokenTree};
 use quote::{format_ident, quote, ToTokens};
+use syn::{parse::Parse, parse2, parse_macro_input, token::Type, Item};
 
 #[proc_macro]
 pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -196,11 +197,31 @@ fn let_ast(group: Group) -> Result<Evaluable> {
 }
 
 
+// okay i think that syn is just fully useless here
+
+
 fn functype_ast(group: Group) -> Result<Evaluable> {
     let funcerr = anyhow!("couldn't parse functype definition");
 
+    let st = group.stream();
 
-    Err(funcerr)
+
+    let types: TypesList = parse2(st)?;
+
+
+    Err(anyhow!("got here!"))
+}
+
+struct TypesList(Vec<Type>);
+
+impl Parse for TypesList {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut types: Vec<Type> = vec![];
+        while let Ok(p) = input.parse() {
+            types.push(p);
+        }
+        Ok(TypesList(types))
+    }
 }
 
 fn any_evaluable(tt: TokenTree) -> Result<Evaluable> {
