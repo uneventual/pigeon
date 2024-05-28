@@ -1,7 +1,7 @@
 extern crate proc_macro;
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
-use proc_macro2::{token_stream::TokenStream, Delimiter, Group, Ident, Literal, Punct, TokenTree};
+use proc_macro2::{token_stream::{IntoIter, TokenStream}, Delimiter, Group, Ident, Literal, Punct, TokenTree};
 use quote::{format_ident, quote, ToTokens};
 
 #[proc_macro]
@@ -12,7 +12,7 @@ pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn crow2(ts: TokenStream) -> TokenStream {
     if let Some(TokenTree::Group(root)) = ts.into_iter().next() {
         let ast = paren_to_ast(root);
-        ssa_block(ast)
+        ssa_block(ast.unwrap())
     } else {
         panic!()
     }
@@ -140,22 +140,19 @@ fn defn_ast(group: Group) -> Result<Evaluable> {
 
             let mut vv: Vec<(String, Evaluable)> = vec![];
 
-            let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
+            // let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
 
-            let defn = FuncDef {
-                name,
-                args,
-                body: evvec,
-                resulttype,
+            // let defn = FuncDef {
+            //     name,
+            //     args,
+            //     body: evvec,
+            //     resulttype,
 
-            } 
+            // } ;
 
-            let block = LetBlock {
-                assignments: vv,
-                body: evvec,
-            };
 
-            return Ok(Evaluable::LetBlock(block));
+
+            // return Ok(Evaluable::LetBlock(block));
         }
     }
     ivs
@@ -202,46 +199,61 @@ fn let_ast(group: Group) -> Result<Evaluable> {
 fn functype_ast(group: Group) -> Result<Evaluable> {
     let funcerr = anyhow!("couldn't parse functype definition");
 
-    group.
-
-
 
     Err(funcerr)
 }
 
 fn any_evaluable(tt: TokenTree) -> Result<Evaluable> {
-    let ev = match tt {
-        TokenTree::Group(g) => paren_to_ast(g),
-        TokenTree::Ident(id) => Evaluable::Ident(id.to_string()),
-        TokenTree::Punct(_) => panic!(),
-        TokenTree::Literal(l) => Evaluable::Literal(l),
-    };
+    match tt {
+        TokenTree::Group(g) => Ok(paren_to_ast(g)?),
+        TokenTree::Ident(id) => Ok(Evaluable::Ident(id.to_string())),
+        TokenTree::Punct(_) => Err(anyhow!("invalid syntax")),
+        TokenTree::Literal(l) => Ok(Evaluable::Literal(l)),
+    }
 
-    Ok(ev)
 }
 
-fn paren_to_ast(group: Group) -> Evaluable {
+fn eat_puncts(it: IntoIter) -> String {
+    it.filter(|i| matches!(i, TokenTree::Punct(_))).map(|i| i.to_string()).collect::<String>()
+}
+
+fn eat_start(group: &Group) -> Result<String> {
+    let mut st = group.stream().into_iter();
+
+    if let Some(first) = st.next() {
+        match first {
+            TokenTree::Ident(id) => return Ok(id.to_string()),
+            TokenTree::Punct(p) => return Ok(p.to_string() + &eat_puncts(st)),
+            _ => return Err(anyhow!("invalid first argument")),
+        }
+    } else {
+        Err(anyhow!("empty group"))
+    }
+
+     
+}
+
+fn paren_to_ast(group: Group) -> Result<Evaluable> {
     assert!(group.delimiter() == Delimiter::Parenthesis);
     let mut st = group.stream().into_iter();
-    if let Some(TokenTree::Ident(name)) = st.next() {
-        let name_st = name.to_string();
 
-        match name_st.as_str() {
-            "defn" => return defn_ast(group).context("defn arm").unwrap(),
-            "let" => return let_ast(group).context("let arm").unwrap(),
-            "->" => return functype_ast(group).context("-> arm").unwrap(),
-            _ => (),
-        }
 
-        let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
-        Evaluable::Func(Func {
-            name: name_st,
-            args: evvec,
-        })
-    } else {
-        panic!()
+
+    let name_st = eat_start(&group)?;
+
+    match name_st.as_str() {
+        "defn" => return Ok(defn_ast(group).context("defn arm")?),
+        "let" => return Ok(let_ast(group).context("let arm")?),
+        "->" => return Ok(functype_ast(group).context("-> arm")?),
+        _ => (),
     }
-}
+
+    let evvec: Vec<Evaluable> = st.skip(1).map(|m| any_evaluable(m).unwrap()).collect();
+    Ok(Evaluable::Func(Func {
+        name: name_st,
+        args: evvec,
+    }))
+} 
 
 
 // what do we need here to make it actually work?
@@ -310,13 +322,15 @@ impl ToTokens for FuncArg {
 }
 
 fn funcdef(fd: &FuncDef) -> TokenStream {
-    let body = fd.body.as_ref();
+    let body_first = fd.body[..fd.body.len() - 1].iter();
+    let body_last = &fd.body[fd.body.len() - 1];
     let args = fd.args.iter();
     let name = &fd.name;
     let result = &fd.resulttype;
 
     quote!(fn #name(#(#args),*) -> #result {
-        #body
+        #(#body_first);*
+        #body_last
     })
 }
 
