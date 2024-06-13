@@ -1,9 +1,11 @@
 extern crate proc_macro;
+use std::fmt::Write;
+
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use proc_macro2::{token_stream::{IntoIter, TokenStream}, Delimiter, Group, Ident, Literal, Punct, TokenTree};
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse::Parse, parse2, parse_macro_input, token::Type, Item};
+use syn::{parse::Parse, parse2, parse_macro_input, token::{Token, Type}, Item};
 
 #[proc_macro]
 pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -135,25 +137,49 @@ fn defn_ast(group: Group) -> Result<Evaluable> {
         _ => None 
     }.context("function needs a name")?.to_string();
 
-    if let Some(TokenTree::Group(assignments)) = st.next() {
-        if assignments.delimiter() == Delimiter::Bracket {
-            let mut as_st = assignments.stream().into_iter();
-
-            let mut vv: Vec<(String, Evaluable)> = vec![];
-
-            // let evvec: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
-
-            // let defn = FuncDef {
-            //     name,
-            //     args,
-            //     body: evvec,
-            //     resulttype,
-
-            // } ;
+    let resulttype = if let Some(TokenTree::Group(func_type)) = st.next() {
+        if func_type.delimiter() == Delimiter::Bracket {
+            functype_ast(func_type)?
+        } else {
+            return ivs;
+        }
+    } else {
+        return ivs;
+    };
 
 
+
+    if let Some(TokenTree::Group(arguments)) = st.next() {
+        if arguments.delimiter() == Delimiter::Bracket {
+            let assignments_stream = arguments.stream().into_iter();
+
+            let mut assignments_vector: Vec<String> = vec![];
+
+            for mut name in assignments_stream.into_iter() {
+                match name {
+                    TokenTree::Ident(s) => assignments_vector.push(s.to_string()),
+                    _ => return ivs,
+                };
+            }
+
+            let evaluables: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
+
+            let block = LetBlock {
+                assignments: assignments_vector,
+                body: evaluables,
+            };
 
             // return Ok(Evaluable::LetBlock(block));
+
+
+            let defn = FuncDef {
+                name,
+                args: assignments_vector,
+                body: evaluables,
+                signature: resulttype,
+            } ;
+
+            return Ok(Evaluable::FuncDef(defn));
         }
     }
     ivs
@@ -200,19 +226,30 @@ fn let_ast(group: Group) -> Result<Evaluable> {
 // okay i think that syn is just fully useless here
 
 
-fn functype_ast(group: Group) -> Result<Evaluable> {
+fn functype_ast(group: Group) -> Result<TypesList> {
     let funcerr = anyhow!("couldn't parse functype definition");
 
     let st = group.stream();
-
-
-    let types: TypesList = parse2(st)?;
-
-
-    Err(anyhow!("got here!"))
+    
+    Ok(parse2(st)?)
 }
 
-struct TypesList(Vec<Type>);
+
+impl std::fmt::Debug for TypesList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_char('{');
+        for ty in self.0 {
+            let name = format!("{}", &ty.span.source_text().unwrap_or("[missing type]".to_string()));
+            f.write_str(&name)?;
+            f.write_char(',')?;
+        }
+        f.write_char('}')?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct TypesList(pub Vec<Type>);
 
 impl Parse for TypesList {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -289,9 +326,9 @@ enum ValId {
 #[derive(Clone, Debug)]
 struct FuncDef {
     name: String,
-    args: Vec<FuncArg>,
+    args: Vec<String>,
     body: Vec<Evaluable>,
-    resulttype: String,
+    signature: TypesList
 }
 
 #[derive(Clone, Debug)]
@@ -330,6 +367,7 @@ enum Evaluable {
     FuncDef(FuncDef),
     LetBlock(LetBlock),
     TokenBlock(TokenStream),
+    TypesList(TypesList)
 }
 
 impl ToTokens for FuncArg {
