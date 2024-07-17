@@ -1,7 +1,7 @@
-use std::fmt::Write;
 
-use proc_macro2::{token_stream::TokenStream, Literal};
-use syn::Type;
+
+use proc_macro2::{token_stream::TokenStream};
+
 
 use crate::parse::{SIRNode, SingleType, TypesList};
 use quote::{format_ident, quote, ToTokens};
@@ -159,9 +159,9 @@ fn funcdef(fd: &FuncDef) -> TokenStream {
 
 fn letblock(lb: &LetBlock) -> TokenStream {
     let body = lb.body.clone().into_iter().map(ssa_block);
-    let mut blocks = lb.assignments.iter();
+    let blocks = lb.assignments.iter();
 
-    let mut last_b: Option<SIRNode> = None;
+    let _last_b: Option<SIRNode> = None;
 
     quote!({ #(#blocks)*  { #(#body)* } };)
 }

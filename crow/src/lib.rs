@@ -1,15 +1,8 @@
 extern crate proc_macro;
-use std::fmt::Write;
 
 use crate::parse::paren_to_ast;
-use anyhow::{anyhow, Context, Result};
-use itertools::Itertools;
-use proc_macro2::{
-    token_stream::{IntoIter, TokenStream},
-    Delimiter, Group, Literal, TokenTree,
-};
-use quote::{format_ident, quote, ToTokens};
-use syn::{parse::Parse, parse2, token::Type};
+
+use proc_macro2::{token_stream::TokenStream, TokenTree};
 
 mod codegen;
 mod parse;

@@ -4,7 +4,7 @@ use crate::codegen::{Func, FuncDef, LetAssignment, LetBlock, ValId};
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use proc_macro2::{token_stream::IntoIter, Delimiter, Group, TokenTree};
-use syn::{parse::Parse, parse2, token::Type};
+use syn::{parse::Parse, token::Type};
 
 use proc_macro2::{token_stream::TokenStream, Literal};
 
@@ -26,7 +26,7 @@ fn defn_ast(group: Group) -> Result<SIRNode> {
     ));
     let mut st = group.stream().into_iter().skip(1);
 
-    let name = match st.next().context("function needs a name")? {
+    let _name = match st.next().context("function needs a name")? {
         TokenTree::Ident(n) => Some(n),
         _ => None,
     }
@@ -127,14 +127,13 @@ fn let_ast(group: Group) -> Result<SIRNode> {
 
 impl std::fmt::Debug for TypesList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_char('{');
+        f.write_char('{')?;
         for ty in &self.0 {
-            let name = format!(
-                "{}",
-                &ty.span
-                    .source_text()
-                    .unwrap_or("[missing type]".to_string())
-            );
+            let name = ty
+                .span
+                .source_text()
+                .unwrap_or("[missing type]".to_string())
+                .to_string();
             f.write_str(&name)?;
             f.write_char(',')?;
         }
@@ -152,7 +151,7 @@ impl std::fmt::Debug for SingleType {
                 .span
                 .source_text()
                 .unwrap_or("[missing type]".to_string())
-        ));
+        ))?;
         Ok(())
     }
 }
@@ -193,9 +192,9 @@ fn eat_start(group: &Group) -> Result<String> {
 
     if let Some(first) = st.next() {
         match first {
-            TokenTree::Ident(id) => return Ok(id.to_string()),
-            TokenTree::Punct(p) => return Ok(p.to_string() + &eat_puncts(st)),
-            _ => return Err(anyhow!("invalid first argument")),
+            TokenTree::Ident(id) => Ok(id.to_string()),
+            TokenTree::Punct(p) => Ok(p.to_string() + &eat_puncts(st)),
+            _ => Err(anyhow!("invalid first argument")),
         }
     } else {
         Err(anyhow!("empty group"))
@@ -204,13 +203,13 @@ fn eat_start(group: &Group) -> Result<String> {
 
 pub fn paren_to_ast(group: Group) -> Result<SIRNode> {
     assert!(group.delimiter() == Delimiter::Parenthesis);
-    let mut st = group.stream().into_iter();
+    let st = group.stream().into_iter();
 
     let name_st = eat_start(&group)?;
 
     match name_st.as_str() {
-        "defn" => return Ok(defn_ast(group).context("defn arm")?),
-        "let" => return Ok(let_ast(group).context("let arm")?),
+        "defn" => return defn_ast(group).context("defn arm"),
+        "let" => return let_ast(group).context("let arm"),
         // "->" => return Ok(functype_ast(group).context("-> arm")?),
         _ => (),
     }
