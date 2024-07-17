@@ -3,9 +3,15 @@ use std::fmt::Write;
 
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
-use proc_macro2::{token_stream::{IntoIter, TokenStream}, Delimiter, Group, Ident, Literal, Punct, TokenTree};
+use proc_macro2::{
+    token_stream::{IntoIter, TokenStream},
+    Delimiter, Group, Literal, TokenTree,
+};
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse::Parse, parse2, parse_macro_input, token::{Token, Type}, Item};
+use syn::{parse::Parse, parse2, token::Type};
+mod codegen;
+
+use codegen::ssa_block;
 
 #[proc_macro]
 pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -19,51 +25,6 @@ fn crow2(ts: TokenStream) -> TokenStream {
     } else {
         panic!()
     }
-}
-
-fn ssa_block(ast: Evaluable) -> TokenStream {
-    eprintln!("{:?}", ast);
-    let mut bfs = vec![ast];
-
-    let mut i: usize = 0;
-    while i < bfs.len() {
-        let mut bv = {
-            let mut addr = bfs.len();
-            let b = &mut bfs[i];
-            let mut bv: Vec<Evaluable> = vec![];
-            if let Evaluable::Func(func) = b {
-                for arg in func.args.iter_mut() {
-                    bv.push(arg.clone());
-                    *arg = Evaluable::Stat(ValId::Reference(addr));
-                    addr += 1;
-                }
-            };
-            // probably we want to put this in the letblock function actually
-
-            bv
-        };
-
-        bfs.append(&mut bv);
-        i += 1;
-    }
-
-    let mut stream = TokenStream::new();
-
-    eprintln!("{:?}", bfs);
-    for (i, ev) in bfs.into_iter().enumerate().rev() {
-        stream.extend(letline(ev, i));
-    }
-
-    stream.extend(usize_name(0));
-
-    let ret = quote!({ #stream });
-
-    ret
-}
-
-fn letline(ev: Evaluable, num: usize) -> TokenStream {
-    let noname = usize_name(num);
-    quote!(let #noname = #ev ;)
 }
 
 fn to_valids(ev: &Evaluable) -> Option<ValId> {
@@ -94,11 +55,6 @@ impl ToTokens for ValId {
     }
 }
 
-fn usize_name(id: usize) -> TokenStream {
-    let idf = format_ident!("__{}", id);
-    quote!(#idf)
-}
-
 // todo:
 // - qualified names
 // - +/-*
@@ -122,9 +78,7 @@ fn usize_name(id: usize) -> TokenStream {
 // 1. defn
 // 2. let blocks
 
-
 // function signature is defined like (-> arg1 arg2 arg3 return)
-
 
 fn defn_ast(group: Group) -> Result<Evaluable> {
     let ivs = Err(anyhow::anyhow!(
@@ -134,8 +88,10 @@ fn defn_ast(group: Group) -> Result<Evaluable> {
 
     let name = match st.next().context("function needs a name")? {
         TokenTree::Ident(n) => Some(n),
-        _ => None 
-    }.context("function needs a name")?.to_string();
+        _ => None,
+    }
+    .context("function needs a name")?
+    .to_string();
 
     let resulttype = if let Some(TokenTree::Group(func_type)) = st.next() {
         if func_type.delimiter() == Delimiter::Bracket {
@@ -146,8 +102,6 @@ fn defn_ast(group: Group) -> Result<Evaluable> {
     } else {
         return ivs;
     };
-
-
 
     if let Some(TokenTree::Group(arguments)) = st.next() {
         if arguments.delimiter() == Delimiter::Bracket {
@@ -171,13 +125,12 @@ fn defn_ast(group: Group) -> Result<Evaluable> {
 
             // return Ok(Evaluable::LetBlock(block));
 
-
             let defn = FuncDef {
                 name,
                 args: assignments_vector,
                 body: evaluables,
                 signature: resulttype,
-            } ;
+            };
 
             return Ok(Evaluable::FuncDef(defn));
         }
@@ -222,24 +175,26 @@ fn let_ast(group: Group) -> Result<Evaluable> {
     syn_error
 }
 
-
 // okay i think that syn is just fully useless here
-
 
 fn functype_ast(group: Group) -> Result<TypesList> {
     let funcerr = anyhow!("couldn't parse functype definition");
 
     let st = group.stream();
-    
+
     Ok(parse2(st)?)
 }
-
 
 impl std::fmt::Debug for TypesList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('{');
         for ty in self.0 {
-            let name = format!("{}", &ty.span.source_text().unwrap_or("[missing type]".to_string()));
+            let name = format!(
+                "{}",
+                &ty.span
+                    .source_text()
+                    .unwrap_or("[missing type]".to_string())
+            );
             f.write_str(&name)?;
             f.write_char(',')?;
         }
@@ -268,11 +223,12 @@ fn any_evaluable(tt: TokenTree) -> Result<Evaluable> {
         TokenTree::Punct(_) => Err(anyhow!("invalid syntax")),
         TokenTree::Literal(l) => Ok(Evaluable::Literal(l)),
     }
-
 }
 
 fn eat_puncts(it: IntoIter) -> String {
-    it.filter(|i| matches!(i, TokenTree::Punct(_))).map(|i| i.to_string()).collect::<String>()
+    it.filter(|i| matches!(i, TokenTree::Punct(_)))
+        .map(|i| i.to_string())
+        .collect::<String>()
 }
 
 fn eat_start(group: &Group) -> Result<String> {
@@ -287,15 +243,11 @@ fn eat_start(group: &Group) -> Result<String> {
     } else {
         Err(anyhow!("empty group"))
     }
-
-     
 }
 
 fn paren_to_ast(group: Group) -> Result<Evaluable> {
     assert!(group.delimiter() == Delimiter::Parenthesis);
     let mut st = group.stream().into_iter();
-
-
 
     let name_st = eat_start(&group)?;
 
@@ -311,8 +263,7 @@ fn paren_to_ast(group: Group) -> Result<Evaluable> {
         name: name_st,
         args: evvec,
     }))
-} 
-
+}
 
 // what do we need here to make it actually work?
 // uh parse imports, types, lifetimes
@@ -328,7 +279,7 @@ struct FuncDef {
     name: String,
     args: Vec<String>,
     body: Vec<Evaluable>,
-    signature: TypesList
+    signature: TypesList,
 }
 
 #[derive(Clone, Debug)]
@@ -367,7 +318,7 @@ enum Evaluable {
     FuncDef(FuncDef),
     LetBlock(LetBlock),
     TokenBlock(TokenStream),
-    TypesList(TypesList)
+    TypesList(TypesList),
 }
 
 impl ToTokens for FuncArg {
@@ -415,6 +366,7 @@ impl ToTokens for Evaluable {
             Evaluable::FuncDef(f) => funcdef(f),
             Evaluable::LetBlock(l) => letblock(l),
             Evaluable::TokenBlock(t) => t.clone(),
+            Evaluable::TypesList(_) => todo!(),
         };
         stream.extend(toks);
     }
