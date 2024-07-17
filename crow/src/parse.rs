@@ -128,7 +128,7 @@ fn let_ast(group: Group) -> Result<SIRNode> {
 impl std::fmt::Debug for TypesList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('{');
-        for ty in self.0 {
+        for ty in &self.0 {
             let name = format!(
                 "{}",
                 &ty.span
