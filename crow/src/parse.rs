@@ -4,7 +4,7 @@ use crate::codegen::{Func, FuncDef, LetAssignment, LetBlock, ValId};
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use proc_macro2::{token_stream::IntoIter, Delimiter, Group, TokenTree};
-use syn::{parse::Parse, token::Type};
+use syn::{parse::Parse, parse2, token::Type};
 
 use proc_macro2::{token_stream::TokenStream, Literal};
 
@@ -26,55 +26,51 @@ fn defn_ast(group: Group) -> Result<SIRNode> {
     ));
     let mut st = group.stream().into_iter().skip(1);
 
-    let _name = match st.next().context("function needs a name")? {
+    let name = match st.next().context("function needs a name")? {
         TokenTree::Ident(n) => Some(n),
         _ => None,
     }
     .context("function needs a name")?
     .to_string();
 
-    // let resulttype = if let Some(TokenTree::Group(func_type)) = st.next() {
-    //     if func_type.delimiter() == Delimiter::Bracket {
-    //         functype_ast(func_type)?
-    //     } else {
-    //         return ivs;
-    //     }
-    // } else {
-    //     return ivs;
-    // };
+    let resulttype: Type = if let Some(TokenTree::Group(func_type)) = st.next() {
+        if func_type.delimiter() == Delimiter::Bracket {
+            parse2::<Type>(func_type.stream())?
+        } else {
+            return ivs;
+        }
+    } else {
+        return ivs;
+    };
 
-    // if let Some(TokenTree::Group(arguments)) = st.next() {
-    //     if arguments.delimiter() == Delimiter::Bracket {
-    //         let assignments_stream = arguments.stream().into_iter();
+    if let Some(TokenTree::Group(arguments)) = st.next() {
+        if arguments.delimiter() == Delimiter::Bracket {
+            let assignments_stream = arguments.stream().into_iter();
 
-    //         let mut assignments_vector: Vec<String> = vec![];
+            let mut assignments_vector: Vec<String> = vec![];
 
-    //         for mut name in assignments_stream.into_iter() {
-    //             match name {
-    //                 TokenTree::Ident(s) => assignments_vector.push(s.to_string()),
-    //                 _ => return ivs,
-    //             };
-    //         }
+            for mut name in assignments_stream.into_iter() {
+                match name {
+                    TokenTree::Ident(s) => assignments_vector.push(s.to_string()),
+                    _ => return ivs,
+                };
+            }
 
-    //         let evaluables: Vec<Evaluable> = st.map(|m| any_evaluable(m).unwrap()).collect();
+            let evaluables: Vec<SIRNode> = st.map(|m| any_evaluable(m).unwrap()).collect();
 
-    //         let block = LetBlock {
-    //             assignments: assignments_vector,
-    //             body: evaluables,
-    //         };
+            // return Ok(Evaluable::LetBlock(block));
 
-    //         // return Ok(Evaluable::LetBlock(block));
+            let defn = FuncDef {
+                name,
+                args: assignments_vector,
+                body: evaluables,
+                signature: todo!(),
+                result_type: SingleType(resulttype),
+            };
 
-    //         let defn = FuncDef {
-    //             name,
-    //             args: assignments_vector,
-    //             body: evaluables,
-    //             signature: resulttype,
-    //         };
-
-    //         return Ok(Evaluable::FuncDef(defn));
-    //     }
-    // }
+            return Ok(SIRNode::FuncDef(defn));
+        }
+    }
     ivs
 }
 
@@ -117,13 +113,12 @@ fn let_ast(group: Group) -> Result<SIRNode> {
 
 // okay i think that syn is just fully useless here
 
-// fn functype_ast(group: Group) -> Result<SIRNode> {
-//     let funcerr = anyhow!("couldn't parse functype definition");
+fn parse_typeslist(group: Group) -> Result<TypesList> {
+    let st = group.stream();
+    let parsed = parse2::<TypesList>(st)?;
 
-//     let st = group.stream();
-
-//     Ok(parse2(st)?)
-// }
+    Ok(parsed)
+}
 
 impl std::fmt::Debug for TypesList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

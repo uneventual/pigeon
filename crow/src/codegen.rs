@@ -1,7 +1,4 @@
-
-
-use proc_macro2::{token_stream::TokenStream};
-
+use proc_macro2::token_stream::TokenStream;
 
 use crate::parse::{SIRNode, SingleType, TypesList};
 use quote::{format_ident, quote, ToTokens};
@@ -100,11 +97,11 @@ impl ToTokens for ValId {
 
 #[derive(Clone, Debug)]
 pub struct FuncDef {
-    name: String,
-    args: Vec<String>,
-    body: Vec<SIRNode>,
-    signature: TypesList,
-    result_type: SingleType,
+    pub name: String,
+    pub args: Vec<String>,
+    pub body: Vec<SIRNode>,
+    pub signature: TypesList,
+    pub result_type: SingleType,
 }
 
 #[derive(Clone, Debug)]
