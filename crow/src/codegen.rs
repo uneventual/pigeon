@@ -1,6 +1,7 @@
 use proc_macro2::token_stream::TokenStream;
 
-use crate::parse::{SIRNode, SingleType, TypesList};
+use crate::explicit_types::{SingleType, TypesList};
+use crate::parse::SIRNode;
 use quote::{format_ident, quote, ToTokens};
 
 pub fn ssa_block(ast: SIRNode) -> TokenStream {
