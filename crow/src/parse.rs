@@ -1,7 +1,8 @@
-use crate::codegen::{Func, FuncDef, LetBlock, ValId};
-use anyhow::{anyhow, Context, Result};
+use crate::codegen::{Func, FuncDef, LetAssignments, LetBlock, ValId};
+use anyhow::Result;
 use proc_macro2::{token_stream::IntoIter, Delimiter, Group, TokenTree};
 
+use crate::codegen::{CodeError, SyntaxErrorable};
 use proc_macro2::Literal;
 
 #[derive(Clone, Debug)]
@@ -14,21 +15,37 @@ pub enum SIRNode {
     LetBlock(LetBlock),
 }
 
-fn defn_ast(group: &Group) -> Result<SIRNode> {
+fn defn_ast(group: &Group) -> Result<FuncDef, CodeError> {
     todo!()
 }
 
-fn let_ast(group: &Group) -> Result<SIRNode> {
-    todo!()
+fn let_ast(group: &Group) -> Result<LetBlock, CodeError> {
+    let mut st = group.stream().into_iter();
+
+    st.next();
+    let letblock = st
+        .next()
+        .ok_or(group.error("let blocks require a valid [name assignment] block"))?;
+    let letblock_parsed: Result<LetAssignments, CodeError> = match letblock {
+        TokenTree::Group(g) => (&g).try_into(),
+        _ => Err(letblock.error("let blocks require a valid [name assignment] block")),
+    };
+
+    let evaluables: Result<Vec<SIRNode>, CodeError> = st.map(|f| f.to_sir()).collect();
+
+    Ok(LetBlock {
+        assignments: letblock_parsed?,
+        body: evaluables?,
+    })
 }
 
 impl SIRParse for TokenTree {
-    fn to_sir(&self) -> Result<SIRNode> {
+    fn to_sir(&self) -> Result<SIRNode, CodeError> {
         let tt = self;
         match tt {
             TokenTree::Group(g) => Ok(g.to_sir()?),
             TokenTree::Ident(id) => Ok(SIRNode::Ident(id.to_string())),
-            TokenTree::Punct(_) => Err(anyhow!("invalid syntax")),
+            TokenTree::Punct(_) => Err(self.error("punctuation not allowed here")),
             TokenTree::Literal(l) => Ok(SIRNode::Literal(l.clone())),
         }
     }
@@ -40,22 +57,22 @@ fn eat_puncts(it: IntoIter) -> String {
         .collect::<String>()
 }
 
-fn eat_start(group: &Group) -> Result<String> {
+fn eat_start(group: &Group) -> Result<String, CodeError> {
     let mut st = group.stream().into_iter();
 
     if let Some(first) = st.next() {
         match first {
             TokenTree::Ident(id) => Ok(id.to_string()),
             TokenTree::Punct(p) => Ok(p.to_string() + &eat_puncts(st)),
-            _ => Err(anyhow!("invalid first argument")),
+            _ => Err(group.error("invalid first argument")),
         }
     } else {
-        Err(anyhow!("empty group"))
+        Err(group.error("empty group"))
     }
 }
 
 impl SIRParse for Group {
-    fn to_sir(&self) -> Result<SIRNode> {
+    fn to_sir(&self) -> Result<SIRNode, CodeError> {
         let group = self;
         assert!(group.delimiter() == Delimiter::Parenthesis);
         let st = group.stream().into_iter();
@@ -63,8 +80,8 @@ impl SIRParse for Group {
         let name_st = eat_start(&group)?;
 
         match name_st.as_str() {
-            "defn" => return defn_ast(group).context("defn arm"),
-            "let" => return let_ast(group).context("let arm"),
+            "defn" => return Ok(defn_ast(group)?.into()),
+            "let" => return Ok(let_ast(group)?.into()),
             // "->" => return Ok(functype_ast(group).context("-> arm")?),
             _ => (),
         }
@@ -78,5 +95,5 @@ impl SIRParse for Group {
 }
 
 pub trait SIRParse {
-    fn to_sir(&self) -> Result<SIRNode>;
+    fn to_sir(&self) -> Result<SIRNode, CodeError>;
 }

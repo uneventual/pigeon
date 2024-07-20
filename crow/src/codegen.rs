@@ -1,11 +1,14 @@
+use itertools::Itertools;
 use proc_macro2::token_stream::TokenStream;
+use proc_macro2::{Delimiter, Group, Span, TokenTree};
 
 use crate::explicit_types::{SingleType, TypesList};
 use crate::parse::SIRNode;
+use crate::parse::SIRParse;
 use quote::{format_ident, quote, ToTokens};
 
 pub fn ssa_block(ast: SIRNode) -> TokenStream {
-    eprintln!("{:?}", ast);
+    // eprintln!("{:?}", ast);
     let mut bfs = vec![ast];
 
     let mut i: usize = 0;
@@ -32,7 +35,7 @@ pub fn ssa_block(ast: SIRNode) -> TokenStream {
 
     let mut stream = TokenStream::new();
 
-    eprintln!("{:?}", bfs);
+    // eprintln!("{:?}", bfs);
     for (i, ev) in bfs.into_iter().enumerate().rev() {
         stream.extend(letline(ev, i));
     }
@@ -64,13 +67,13 @@ pub enum ValId {
 }
 
 fn to_valids(ev: &SIRNode) -> Option<ValId> {
-    eprintln!("{:?}", ev);
+    // eprintln!("{:?}", ev);
     let x = match ev {
         SIRNode::Stat(valid) => Some(valid.clone()),
         SIRNode::Ident(st) => Some(ValId::Ident(format_ident!("{}", st))),
         _ => None,
     };
-    eprintln!("{:?}", x);
+    // eprintln!("{:?}", x);
     x
 }
 
@@ -113,7 +116,7 @@ pub struct FuncArg {
 
 #[derive(Clone, Debug)]
 pub struct LetBlock {
-    pub assignments: Vec<LetAssignment>,
+    pub assignments: LetAssignments,
     pub body: Vec<SIRNode>,
 }
 
@@ -121,6 +124,114 @@ pub struct LetBlock {
 pub struct LetAssignment {
     pub name: String,
     pub val: SIRNode,
+}
+
+#[derive(Clone, Debug)]
+pub struct LetAssignments(Vec<LetAssignment>);
+
+use std::error::Error;
+use std::fmt::Display;
+
+#[derive(Debug, Clone)]
+pub struct CodeError {
+    errors: Vec<CodeErrorInstance>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CodeErrorInstance {
+    message: String,
+    node: TokenTree,
+    error_span: Option<Span>,
+}
+
+impl From<CodeErrorInstance> for CodeError {
+    fn from(value: CodeErrorInstance) -> Self {
+        CodeError {
+            errors: vec![value],
+        }
+    }
+}
+
+impl Display for CodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for e in &self.errors {
+            f.write_str(&e.message)?;
+            if let Some(source_text) = e.node.span().source_text() {
+                f.write_fmt(format_args!("\"{}\"", source_text))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Error for CodeError {}
+
+impl TryFrom<&Group> for LetAssignments {
+    type Error = CodeError;
+    fn try_from(value: &Group) -> std::result::Result<Self, Self::Error> {
+        if !matches!(value.delimiter(), Delimiter::Bracket) {
+            return Err(value.error("let block must be delimited by [square brackets]"));
+        }
+
+        let x: Result<Vec<_>, Self::Error> = value
+            .stream()
+            .into_iter()
+            .chunks(2)
+            .into_iter()
+            .map(|mut vv| {
+                let err = value.error("blah");
+
+                let name = vv.next().ok_or(err.clone())?.ident_string()?;
+                let value = vv.next().ok_or(err.clone())?.to_sir()?;
+
+                Ok(LetAssignment { name, val: value })
+            })
+            .collect();
+
+        Ok(LetAssignments { 0: x? })
+    }
+}
+
+pub trait IdentString {
+    fn ident_string(&self) -> Result<String, CodeError>;
+}
+
+impl IdentString for TokenTree {
+    fn ident_string(&self) -> Result<String, CodeError> {
+        if let TokenTree::Ident(i) = self {
+            return Ok(i.to_string());
+        } else {
+            return Err(self.error(&format!("\"{}\" is not an ident", self)));
+        }
+    }
+}
+
+pub trait SyntaxErrorable {
+    fn error(&self, message: &str) -> CodeError;
+}
+
+impl<T: Into<TokenTree> + Clone> SyntaxErrorable for T {
+    fn error(&self, message: &str) -> CodeError {
+        let t: TokenTree = self.clone().into();
+        CodeErrorInstance {
+            message: message.to_string(),
+            node: t,
+            error_span: None,
+        }
+        .into()
+    }
+}
+
+impl From<LetBlock> for SIRNode {
+    fn from(value: LetBlock) -> Self {
+        SIRNode::LetBlock(value)
+    }
+}
+
+impl From<FuncDef> for SIRNode {
+    fn from(value: FuncDef) -> Self {
+        SIRNode::FuncDef(value)
+    }
 }
 
 impl ToTokens for LetAssignment {
@@ -157,7 +268,7 @@ fn funcdef(fd: &FuncDef) -> TokenStream {
 
 fn letblock(lb: &LetBlock) -> TokenStream {
     let body = lb.body.clone().into_iter().map(ssa_block);
-    let blocks = lb.assignments.iter();
+    let blocks = lb.assignments.0.iter();
 
     let _last_b: Option<SIRNode> = None;
 
@@ -182,8 +293,6 @@ impl ToTokens for SIRNode {
             SIRNode::Stat(s) => quote!(#s),
             SIRNode::FuncDef(f) => funcdef(f),
             SIRNode::LetBlock(l) => letblock(l),
-            SIRNode::TokenBlock(t) => t.clone(),
-            SIRNode::TypesList(_) => todo!(),
         };
         stream.extend(toks);
     }
