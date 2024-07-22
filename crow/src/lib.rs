@@ -16,8 +16,11 @@ pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 fn crow2(ts: TokenStream) -> TokenStream {
     if let Some(TokenTree::Group(root)) = ts.into_iter().next() {
-        let ast = root.to_sir();
-        ssa_block(ast.unwrap())
+        let ast_result = root.to_sir();
+        match ast_result {
+            Ok(ast) => ssa_block(ast),
+            Err(ce) => syn::Error::new(ce.span(), ce).to_compile_error(),
+        }
     } else {
         panic!()
     }

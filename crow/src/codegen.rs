@@ -137,6 +137,13 @@ pub struct CodeError {
     errors: Vec<CodeErrorInstance>,
 }
 
+impl CodeError {
+    pub fn span(&self) -> Span {
+        let last_error = self.errors.last().unwrap();
+        last_error.error_span.unwrap_or(last_error.node.span())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CodeErrorInstance {
     message: String,
@@ -154,11 +161,13 @@ impl From<CodeErrorInstance> for CodeError {
 
 impl Display for CodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Error: ")?;
         for e in &self.errors {
-            f.write_str(&e.message)?;
-            if let Some(source_text) = e.node.span().source_text() {
-                f.write_fmt(format_args!("\"{}\"", source_text))?;
-            }
+            f.write_fmt(format_args!("{} \n", e.message))?;
+
+            // if let Some(source_text) = e.node.span().source_text() {
+            //     f.write_fmt(format_args!("{}\n", source_text))?;
+            // }
         }
         Ok(())
     }
@@ -179,9 +188,13 @@ impl TryFrom<&Group> for LetAssignments {
             .chunks(2)
             .into_iter()
             .map(|mut vv| {
-                let err = value.error("blah");
+                let err = value.error("unmatched pairs in let block");
 
-                let name = vv.next().ok_or(err.clone())?.ident_string()?;
+                let name = vv
+                    .next()
+                    .ok_or(err.clone())?
+                    .ident_string()
+                    .context(value.error("let blocks require [ident sexpr] pairs"))?;
                 let value = vv.next().ok_or(err.clone())?.to_sir()?;
 
                 Ok(LetAssignment { name, val: value })
@@ -202,6 +215,22 @@ impl IdentString for TokenTree {
             return Ok(i.to_string());
         } else {
             return Err(self.error(&format!("\"{}\" is not an ident", self)));
+        }
+    }
+}
+
+trait Contextable<T> {
+    fn context(self, context: CodeError) -> Result<T, CodeError>;
+}
+
+impl<T> Contextable<T> for Result<T, CodeError> {
+    fn context(self, context: CodeError) -> Result<T, CodeError> {
+        match self {
+            Ok(s) => Ok(s),
+            Err(mut s) => {
+                s.errors.extend(context.errors);
+                Err(s)
+            }
         }
     }
 }

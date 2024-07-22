@@ -86,10 +86,10 @@ impl SIRParse for Group {
             _ => (),
         }
 
-        let evvec: Vec<SIRNode> = st.skip(1).map(|m| m.to_sir().unwrap()).collect();
+        let evvec: Result<Vec<SIRNode>, CodeError> = st.skip(1).map(|m| m.to_sir()).collect();
         Ok(SIRNode::Func(Func {
             name: name_st,
-            args: evvec,
+            args: evvec?,
         }))
     }
 }

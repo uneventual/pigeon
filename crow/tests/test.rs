@@ -19,3 +19,9 @@ fn test_let() {
     let x = crow!((let [a 11 b 4 c 3] (mul a (add b c))));
     assert_eq!(77, x)
 }
+
+#[test]
+fn test_fail_let() {
+    let x = crow!((let [a b 4 c 3] (mul a (add b c))));
+    assert_eq!(77, x)
+}
