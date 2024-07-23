@@ -3,13 +3,13 @@ use proc_macro2::token_stream::TokenStream;
 use proc_macro2::{Delimiter, Group, Span, TokenTree};
 use syn::spanned::Spanned;
 
-use crate::explicit_types::{Type, TypesList};
+use crate::explicit_types::{Type};
 
 use crate::parse::SIRNode;
 use crate::parse::SIRParse;
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
-use syn::{parse::Parse, parse2};
+
 
 pub fn ssa_block(ast: SIRNode) -> TokenStream {
     // eprintln!("{:?}", ast);
@@ -72,13 +72,13 @@ pub enum ValId {
 
 fn to_valids(ev: &SIRNode) -> Option<ValId> {
     // eprintln!("{:?}", ev);
-    let x = match ev {
+    
+    // eprintln!("{:?}", x);
+    match ev {
         SIRNode::Stat(valid) => Some(valid.clone()),
         SIRNode::Ident(st) => Some(ValId::Ident(format_ident!("{}", st))),
         _ => None,
-    };
-    // eprintln!("{:?}", x);
-    x
+    }
 }
 
 fn funcfrom(func: &Func) -> TokenStream {
@@ -207,7 +207,7 @@ impl TryFrom<&Group> for LetAssignments {
             })
             .collect();
 
-        Ok(LetAssignments { 0: x? })
+        Ok(LetAssignments(x?))
     }
 }
 
@@ -218,9 +218,9 @@ pub trait IdentString {
 impl IdentString for TokenTree {
     fn ident_string(&self) -> Result<String, CodeError> {
         if let TokenTree::Ident(i) = self {
-            return Ok(i.to_string());
+            Ok(i.to_string())
         } else {
-            return Err(self.error(&format!("\"{}\" is not an ident", self)));
+            Err(self.error(&format!("\"{}\" is not an ident", self)))
         }
     }
 }
@@ -326,7 +326,7 @@ impl ToTokens for SIRNode {
             }
             SIRNode::Literal(l) => quote!(#l),
             SIRNode::Stat(s) => quote!(#s),
-            SIRNode::FuncDef(f) => todo!(),
+            SIRNode::FuncDef(_f) => todo!(),
             SIRNode::LetBlock(l) => letblock(l),
         };
         stream.extend(toks);

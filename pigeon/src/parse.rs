@@ -15,7 +15,7 @@ pub enum SIRNode {
     LetBlock(LetBlock),
 }
 
-fn defn_ast(group: &Group) -> Result<FuncDef, CodeError> {
+fn defn_ast(_group: &Group) -> Result<FuncDef, CodeError> {
     todo!()
 }
 
@@ -77,7 +77,7 @@ impl SIRParse for Group {
         assert!(group.delimiter() == Delimiter::Parenthesis);
         let st = group.stream().into_iter();
 
-        let name_st = eat_start(&group)?;
+        let name_st = eat_start(group)?;
 
         match name_st.as_str() {
             "defn" => return Ok(defn_ast(group)?.into()),
