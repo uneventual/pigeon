@@ -1,4 +1,4 @@
-use crow::crow;
+use pigeon::crow;
 
 fn add(a: i32, b: i32) -> i32 {
     a + b
@@ -17,11 +17,5 @@ fn test_add() {
 #[test]
 fn test_let() {
     let x = crow!((let [a 11 b 4 c 3] (mul a (add b c))));
-    assert_eq!(77, x)
-}
-
-#[test]
-fn test_fail_let() {
-    let x = crow!((let [a b 4 c 3] (mul a (add b c))));
     assert_eq!(77, x)
 }

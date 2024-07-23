@@ -1,11 +1,15 @@
 use itertools::Itertools;
 use proc_macro2::token_stream::TokenStream;
 use proc_macro2::{Delimiter, Group, Span, TokenTree};
+use syn::spanned::Spanned;
 
-use crate::explicit_types::{SingleType, TypesList};
+use crate::explicit_types::{Type, TypesList};
+
 use crate::parse::SIRNode;
 use crate::parse::SIRParse;
 use quote::{format_ident, quote, ToTokens};
+use std::fmt::Debug;
+use syn::{parse::Parse, parse2};
 
 pub fn ssa_block(ast: SIRNode) -> TokenStream {
     // eprintln!("{:?}", ast);
@@ -102,16 +106,18 @@ impl ToTokens for ValId {
 #[derive(Clone, Debug)]
 pub struct FuncDef {
     pub name: String,
-    pub args: Vec<String>,
     pub body: Vec<SIRNode>,
-    pub signature: TypesList,
-    pub result_type: SingleType,
+    pub signature: FuncSig,
 }
 
 #[derive(Clone, Debug)]
-pub struct FuncArg {
-    typename: String,
-    name: String,
+pub struct FuncSig {
+    return_type: Type,
+    args: Vec<(String, Type)>,
+}
+
+trait BSDebug {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 }
 
 #[derive(Clone, Debug)]
@@ -272,28 +278,28 @@ impl ToTokens for LetAssignment {
     }
 }
 
-impl ToTokens for FuncArg {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let name = &self.name;
-        let typename = &self.typename;
-        let quote = quote!(#name: #typename);
+// impl ToTokens for FuncArg {
+//     fn to_tokens(&self, tokens: &mut TokenStream) {
+//         let name = &self.name;
+//         let typename = &self.typename;
+//         let quote = quote!(#name: #typename);
 
-        tokens.extend(quote);
-    }
-}
+//         tokens.extend(quote);
+//     }
+// }
 
-fn funcdef(fd: &FuncDef) -> TokenStream {
-    let body_first = fd.body[..fd.body.len() - 1].iter();
-    let body_last = &fd.body[fd.body.len() - 1];
-    let args = fd.args.iter();
-    let name = &fd.name;
-    let result = &fd.result_type;
+// fn funcdef(fd: &FuncDef) -> TokenStream {
+//     let body_first = fd.body[..fd.body.len() - 1].iter();
+//     let body_last = &fd.body[fd.body.len() - 1];
+//     let args = fd.args.iter();
+//     let name = &fd.name;
+//     let result = &fd.result_type;
 
-    quote!(fn #name(#(#args),*) -> #result {
-        #(#body_first);*
-        #body_last
-    })
-}
+//     quote!(fn #name(#(#args),*) -> #result {
+//         #(#body_first);*
+//         #body_last
+//     })
+// }
 
 fn letblock(lb: &LetBlock) -> TokenStream {
     let body = lb.body.clone().into_iter().map(ssa_block);
@@ -304,7 +310,7 @@ fn letblock(lb: &LetBlock) -> TokenStream {
     quote!({ #(#blocks)*  { #(#body)* } };)
 }
 
-impl ToTokens for SingleType {
+impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         self.0.to_tokens(tokens)
     }
@@ -320,7 +326,7 @@ impl ToTokens for SIRNode {
             }
             SIRNode::Literal(l) => quote!(#l),
             SIRNode::Stat(s) => quote!(#s),
-            SIRNode::FuncDef(f) => funcdef(f),
+            SIRNode::FuncDef(f) => todo!(),
             SIRNode::LetBlock(l) => letblock(l),
         };
         stream.extend(toks);

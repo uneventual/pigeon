@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-crow = { version = "0.1.0", path = "../crow" }
+pigeon = { version = "0.1.0", path = "../pigeon" }
