@@ -1,15 +1,13 @@
 use itertools::Itertools;
 use proc_macro2::token_stream::TokenStream;
 use proc_macro2::{Delimiter, Group, Span, TokenTree};
-use syn::spanned::Spanned;
 
-use crate::explicit_types::{Type};
+use crate::explicit_types::Type;
 
 use crate::parse::SIRNode;
 use crate::parse::SIRParse;
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
-
 
 pub fn ssa_block(ast: SIRNode) -> TokenStream {
     // eprintln!("{:?}", ast);
@@ -72,7 +70,6 @@ pub enum ValId {
 
 fn to_valids(ev: &SIRNode) -> Option<ValId> {
     // eprintln!("{:?}", ev);
-    
     // eprintln!("{:?}", x);
     match ev {
         SIRNode::Stat(valid) => Some(valid.clone()),
