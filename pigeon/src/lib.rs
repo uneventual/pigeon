@@ -6,7 +6,6 @@ use proc_macro2::{token_stream::TokenStream, TokenTree};
 mod codegen;
 mod explicit_types;
 mod parse;
-
 use codegen::ssa_block;
 
 #[proc_macro]
