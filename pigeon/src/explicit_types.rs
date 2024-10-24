@@ -34,7 +34,7 @@ impl std::fmt::Debug for Type {
             syn::Type::TraitObject(_) => "TraitObject",
             syn::Type::Tuple(_) => "Tuple",
             syn::Type::Verbatim(_) => "Verbatim",
-            _ => "Unknown"
+            _ => "Unknown",
         };
 
         f.write_fmt(format_args!("{}({})", st, &ft))?;
@@ -77,7 +77,6 @@ mod tests {
         let types = syn::parse2::<TypesList>(list).unwrap();
         println!("{:?}", types.0[0]);
         assert!(matches!(types.0[0].0, syn::Type::Path(_)));
-        
 
         println!("{:?}", types);
     }

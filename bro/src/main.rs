@@ -13,4 +13,7 @@ fn main() {
     let _y = crow!((let [a 2 b 3] (add a b)));
     let _z = crow!((let [a 11 b 4 c 3] (mul a (add b c))));
     println!("Hello, world! {}", x);
+    let x = crow!((defn add_and_mul [a b] [i32 i32 i32] (mul a (add b 1))) );
+    let res = crow!((x 7 10));
+    assert_eq!(77, res);
 }

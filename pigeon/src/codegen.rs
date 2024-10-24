@@ -15,7 +15,7 @@ pub fn ssa_block(ast: SIRNode) -> TokenStream {
 
     let mut i: usize = 0;
     while i < bfs.len() {
-        let mut bv = {
+        let mut block_vector = {
             let mut addr = bfs.len();
             let b = &mut bfs[i];
             let mut bv: Vec<SIRNode> = vec![];
@@ -31,7 +31,7 @@ pub fn ssa_block(ast: SIRNode) -> TokenStream {
             bv
         };
 
-        bfs.append(&mut bv);
+        bfs.append(&mut block_vector);
         i += 1;
     }
 
@@ -79,8 +79,11 @@ fn to_valids(ev: &SIRNode) -> Option<ValId> {
 }
 
 fn funcfrom(func: &Func) -> TokenStream {
-    let args = func.args.iter().filter_map(to_valids);
+    let args_iter = func.args.iter();
+    println!("args_iter {} :{:?}", func.name, args_iter);
+    let args = args_iter.filter_map(to_valids);
     let name = format_ident!("{}", func.name);
+    eprintln!("{:?}", args);
     let quo = quote!(#name(#(#args),*));
     quo
 }
@@ -109,8 +112,8 @@ pub struct FuncDef {
 
 #[derive(Clone, Debug)]
 pub struct FuncSig {
-    return_type: Type,
-    args: Vec<(String, Type)>,
+    pub return_type: Type,
+    pub args: Vec<(String, Type)>,
 }
 
 trait BSDebug {
@@ -312,6 +315,25 @@ impl ToTokens for Type {
         self.0.to_tokens(tokens)
     }
 }
+impl ToTokens for FuncDef {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let args = self.signature.args.iter().map(|(arg_name, arg_type)| {
+            let arg_ident = format_ident!("{}", arg_name);
+            quote!(#arg_ident: #arg_type)
+        });
+        let return_type = &self.signature.return_type;
+        let body = &self.body;
+
+        let func_def = quote! {
+            |#(#args),*| -> #return_type {
+                #(#body)*
+            }
+        };
+
+        tokens.extend(func_def);
+        eprintln!("{}", tokens.to_string());
+    }
+}
 
 impl ToTokens for SIRNode {
     fn to_tokens(&self, stream: &mut proc_macro2::TokenStream) {
@@ -323,7 +345,7 @@ impl ToTokens for SIRNode {
             }
             SIRNode::Literal(l) => quote!(#l),
             SIRNode::Stat(s) => quote!(#s),
-            SIRNode::FuncDef(_f) => todo!(),
+            SIRNode::FuncDef(f) => quote!(#f),
             SIRNode::LetBlock(l) => letblock(l),
         };
         stream.extend(toks);

@@ -1,4 +1,5 @@
-use crate::codegen::{Func, FuncDef, LetAssignments, LetBlock, ValId};
+use crate::codegen::{Func, FuncDef, FuncSig, LetAssignments, LetBlock, ValId};
+use crate::explicit_types::{Type, TypesList};
 use anyhow::Result;
 use proc_macro2::{token_stream::IntoIter, Delimiter, Group, TokenTree};
 
@@ -15,8 +16,79 @@ pub enum SIRNode {
     LetBlock(LetBlock),
 }
 
-fn defn_ast(_group: &Group) -> Result<FuncDef, CodeError> {
-    todo!()
+pub struct FuncCall {
+    name: String,
+    args: Vec<ValId>,
+}
+
+fn defn_ast(group: &Group) -> Result<FuncDef, CodeError> {
+    let mut st = group.stream().into_iter();
+
+    // Skip the "defn" token
+    st.next();
+
+    // Take the function name
+    let name = match st.next() {
+        Some(TokenTree::Ident(id)) => id.to_string(),
+        _ => return Err(group.error("Expected function name after 'defn'")),
+    };
+
+    // Parse the argument names
+    let args: Vec<String> = match st.next() {
+        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket => g
+            .stream()
+            .into_iter()
+            .filter_map(|tt| {
+                if let TokenTree::Ident(id) = tt {
+                    Some(id.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect(),
+        _ => return Err(group.error("Expected argument list in brackets after function name")),
+    };
+
+    // Parse the types
+    let types = match st.next() {
+        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket => {
+            match syn::parse2::<TypesList>(g.stream()) {
+                Ok(types_list) => types_list,
+                Err(_) => return Err(group.error("Failed to parse types list")),
+            }
+        }
+        _ => return Err(group.error("Expected types list in brackets after argument list")),
+    };
+
+    // Parse the function body
+    let body = match st.next() {
+        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis => g.to_sir()?,
+        _ => return Err(group.error("Expected function body in parentheses")),
+    };
+
+    // Construct the FuncSig
+    let return_type = types
+        .0
+        .last()
+        .cloned()
+        .unwrap_or_else(|| Type(syn::parse_str("()").unwrap()));
+    let arg_types = types
+        .0
+        .iter()
+        .take(types.0.len() - 1)
+        .cloned()
+        .collect::<Vec<_>>();
+    let signature = FuncSig {
+        return_type,
+        args: args.into_iter().zip(arg_types).collect(),
+    };
+
+    // Construct the FuncDef
+    Ok(FuncDef {
+        name,
+        body: vec![body],
+        signature,
+    })
 }
 
 fn let_ast(group: &Group) -> Result<LetBlock, CodeError> {
