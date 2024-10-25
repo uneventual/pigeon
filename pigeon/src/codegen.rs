@@ -10,7 +10,6 @@ use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
 
 pub fn ssa_block(ast: SIRNode) -> TokenStream {
-    // eprintln!("{:?}", ast);
     let mut bfs = vec![ast];
 
     let mut i: usize = 0;
@@ -26,8 +25,6 @@ pub fn ssa_block(ast: SIRNode) -> TokenStream {
                     addr += 1;
                 }
             };
-            // probably we want to put this in the letblock function actually
-
             bv
         };
 
@@ -37,7 +34,6 @@ pub fn ssa_block(ast: SIRNode) -> TokenStream {
 
     let mut stream = TokenStream::new();
 
-    // eprintln!("{:?}", bfs);
     for (i, ev) in bfs.into_iter().enumerate().rev() {
         stream.extend(letline(ev, i));
     }
@@ -59,49 +55,29 @@ fn letline(ev: SIRNode, num: usize) -> TokenStream {
     quote!(let #noname = #ev ;)
 }
 
-// what do we need here to make it actually work?
-// uh parse imports, types, lifetimes
-// be able to declare functions
 #[derive(Clone, Debug)]
 pub enum ValId {
     Reference(usize),
-    Ident(proc_macro2::Ident),
 }
 
-fn to_valids(ev: &SIRNode) -> Option<ValId> {
-    // eprintln!("{:?}", ev);
-    // eprintln!("{:?}", x);
-    match ev {
-        SIRNode::Stat(valid) => Some(valid.clone()),
-        SIRNode::Ident(st) => Some(ValId::Ident(format_ident!("{}", st))),
-        _ => None,
+impl ToTokens for Func {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let func = self;
+        let args = func.args.iter();
+        let name = format_ident!("{}", func.name);
+        let quo = quote!(#name(#(#args),*));
+        tokens.extend(quo);
     }
-}
-
-fn funcfrom(func: &Func) -> TokenStream {
-    let args_iter = func.args.iter();
-    println!("args_iter {} :{:?}", func.name, args_iter);
-    let args = args_iter.filter_map(to_valids);
-    let name = format_ident!("{}", func.name);
-    eprintln!("{:?}", args);
-    let quo = quote!(#name(#(#args),*));
-    quo
 }
 
 impl ToTokens for ValId {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let tok = match self {
-            Self::Ident(id) => quote!(#id),
             Self::Reference(r) => usize_name(*r),
         };
         tokens.extend(tok);
     }
 }
-
-// function signature is defined like (-> arg1 arg2 arg3 return)
-
-// okay so how do we do this
-// we only care a
 
 #[derive(Clone, Debug)]
 pub struct FuncDef {
@@ -170,10 +146,6 @@ impl Display for CodeError {
         f.write_str("Error: ")?;
         for e in &self.errors {
             f.write_fmt(format_args!("{} \n", e.message))?;
-
-            // if let Some(source_text) = e.node.span().source_text() {
-            //     f.write_fmt(format_args!("{}\n", source_text))?;
-            // }
         }
         Ok(())
     }
@@ -278,29 +250,6 @@ impl ToTokens for LetAssignment {
     }
 }
 
-// impl ToTokens for FuncArg {
-//     fn to_tokens(&self, tokens: &mut TokenStream) {
-//         let name = &self.name;
-//         let typename = &self.typename;
-//         let quote = quote!(#name: #typename);
-
-//         tokens.extend(quote);
-//     }
-// }
-
-// fn funcdef(fd: &FuncDef) -> TokenStream {
-//     let body_first = fd.body[..fd.body.len() - 1].iter();
-//     let body_last = &fd.body[fd.body.len() - 1];
-//     let args = fd.args.iter();
-//     let name = &fd.name;
-//     let result = &fd.result_type;
-
-//     quote!(fn #name(#(#args),*) -> #result {
-//         #(#body_first);*
-//         #body_last
-//     })
-// }
-
 fn letblock(lb: &LetBlock) -> TokenStream {
     let body = lb.body.clone().into_iter().map(ssa_block);
     let blocks = lb.assignments.0.iter();
@@ -315,6 +264,7 @@ impl ToTokens for Type {
         self.0.to_tokens(tokens)
     }
 }
+
 impl ToTokens for FuncDef {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let args = self.signature.args.iter().map(|(arg_name, arg_type)| {
@@ -331,14 +281,13 @@ impl ToTokens for FuncDef {
         };
 
         tokens.extend(func_def);
-        eprintln!("{}", tokens.to_string());
     }
 }
 
 impl ToTokens for SIRNode {
     fn to_tokens(&self, stream: &mut proc_macro2::TokenStream) {
         let toks = match self {
-            SIRNode::Func(f) => funcfrom(f),
+            SIRNode::Func(f) => quote!(#f),
             SIRNode::Ident(s) => {
                 let id = format_ident!("{}", s);
                 quote!(#id)

@@ -75,9 +75,6 @@ mod tests {
         let list = quote!(String &str Vec<u8>);
 
         let types = syn::parse2::<TypesList>(list).unwrap();
-        println!("{:?}", types.0[0]);
         assert!(matches!(types.0[0].0, syn::Type::Path(_)));
-
-        println!("{:?}", types);
     }
 }

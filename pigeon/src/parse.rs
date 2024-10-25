@@ -16,21 +16,16 @@ pub enum SIRNode {
     LetBlock(LetBlock),
 }
 
-pub struct FuncCall {
-    name: String,
-    args: Vec<ValId>,
-}
-
-fn defn_ast(group: &Group) -> Result<FuncDef, CodeError> {
+fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
     let mut st = group.stream().into_iter();
 
-    // Skip the "defn" token
+    // Skip the "fn" token
     st.next();
 
     // Take the function name
     let name = match st.next() {
         Some(TokenTree::Ident(id)) => id.to_string(),
-        _ => return Err(group.error("Expected function name after 'defn'")),
+        _ => return Err(group.error("Expected function name after 'fn'")),
     };
 
     // Parse the argument names
@@ -152,7 +147,7 @@ impl SIRParse for Group {
         let name_st = eat_start(group)?;
 
         match name_st.as_str() {
-            "defn" => return Ok(defn_ast(group)?.into()),
+            "fn" => return Ok(fn_ast(group)?.into()),
             "let" => return Ok(let_ast(group)?.into()),
             // "->" => return Ok(functype_ast(group).context("-> arm")?),
             _ => (),

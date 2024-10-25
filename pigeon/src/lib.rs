@@ -19,7 +19,6 @@ fn crow2(ts: TokenStream) -> TokenStream {
         match ast_result {
             Ok(ast) => {
                 let ssa = ssa_block(ast);
-                eprintln!("{}", ssa);
                 ssa
             }
             Err(ce) => syn::Error::new(ce.span(), ce).to_compile_error(),

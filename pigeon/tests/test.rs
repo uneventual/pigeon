@@ -22,7 +22,7 @@ fn test_let() {
 
 #[test]
 fn test_defn() {
-    let x = crow!((defn add_and_mul [a b] [i32 i32 i32] (mul a (add b 1))) );
+    let x = crow!((fn add_and_mul [a b] [i32 i32 i32] (mul a (add b 1))) );
     let res = crow!((x 7 10));
-    assert_eq!(77, x);
+    assert_eq!(77, res);
 }
