@@ -135,7 +135,11 @@ fn eat_start(group: &Group) -> Result<String, CodeError> {
 impl SIRParse for Group {
     fn to_sir(&self) -> Result<SIRNode, CodeError> {
         let group = self;
-        assert!(group.delimiter() == Delimiter::Parenthesis);
+        if group.delimiter() != Delimiter::Parenthesis {
+            return Err(
+                group.error("We can only parse parenthesis groups. This is a compiler bug!")
+            )?;
+        }
         let st = group.stream().into_iter();
 
         let name_st = eat_start(group)?;
