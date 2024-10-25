@@ -81,7 +81,6 @@ impl ToTokens for ValId {
 
 #[derive(Clone, Debug)]
 pub struct FuncDef {
-    pub name: String,
     pub body: Vec<SIRNode>,
     pub signature: FuncSig,
 }
@@ -296,6 +295,7 @@ impl ToTokens for SIRNode {
             SIRNode::Stat(s) => quote!(#s),
             SIRNode::FuncDef(f) => quote!(#f),
             SIRNode::LetBlock(l) => letblock(l),
+            SIRNode::Ref(r) => quote!(&#r),
         };
         stream.extend(toks);
     }

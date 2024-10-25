@@ -22,7 +22,15 @@ fn test_let() {
 
 #[test]
 fn test_defn() {
-    let x = crow!((fn add_and_mul [a b] [i32 i32 i32] (mul a (add b 1))) );
-    let res = crow!((x 7 10));
+    let add_and_mul = crow!((fn [a b] [i32 i32 i32] (mul a (add b 1))) );
+    let res = crow!((add_and_mul 7 10));
     assert_eq!(77, res);
+}
+
+#[test]
+fn more_defn() {
+    let blah = crow! {(fn [a b] [&std::collections::VecDeque<i32> i32 i32] (add 1 2))};
+    let col = std::collections::VecDeque::<i32>::new();
+    let x = crow!((blah &col 5i32));
+    assert_eq!(x, 3);
 }

@@ -14,6 +14,7 @@ pub enum SIRNode {
     Stat(ValId),
     FuncDef(FuncDef),
     LetBlock(LetBlock),
+    Ref(Box<SIRNode>),
 }
 
 fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
@@ -21,12 +22,6 @@ fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
 
     // Skip the "fn" token
     st.next();
-
-    // Take the function name
-    let name = match st.next() {
-        Some(TokenTree::Ident(id)) => id.to_string(),
-        _ => return Err(group.error("Expected function name after 'fn'")),
-    };
 
     // Parse the argument names
     let args: Vec<String> = match st.next() {
@@ -80,7 +75,6 @@ fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
 
     // Construct the FuncDef
     Ok(FuncDef {
-        name,
         body: vec![body],
         signature,
     })
@@ -153,10 +147,30 @@ impl SIRParse for Group {
             _ => (),
         }
 
-        let evvec: Result<Vec<SIRNode>, CodeError> = st.skip(1).map(|m| m.to_sir()).collect();
+        // so we want to take this and make it a for loop instead that joins together
+        // parts that are separated by punctuation and tries to parse them as types
+        let mut evvec = vec![];
+        let mut refdepth = 0;
+        for root in st.skip(1) {
+            if let TokenTree::Punct(p) = &root {
+                if p.as_char() == '&' {
+                    refdepth += 1;
+                } else {
+                    return Err(root.error("this punctuation not allowed here"));
+                }
+            } else {
+                let mut sir = root.to_sir()?;
+                for _ in 0..refdepth {
+                    sir = SIRNode::Ref(Box::new(sir))
+                }
+                refdepth = 0;
+                evvec.push(sir);
+            }
+        }
+        // let evvec: Result<Vec<SIRNode>, CodeError> = st.skip(1).map(|m| m.to_sir()).collect();
         Ok(SIRNode::Func(Func {
             name: name_st,
-            args: evvec?,
+            args: evvec,
         }))
     }
 }
