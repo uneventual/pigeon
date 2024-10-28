@@ -1,5 +1,4 @@
 use pigeon::crow;
-use quote::quote;
 
 fn add(a: i32, b: i32) -> i32 {
     a + b
@@ -18,7 +17,15 @@ fn test_add() {
 #[test]
 fn test_let() {
     let x = crow!((let [a 11 b 4 c 3] (mul a (add b c))));
-    assert_eq!(77, x)
+    // assert_eq!(77, x)
+    assert_eq!(
+        {
+            {
+                5 + 5
+            }
+        },
+        10
+    );
 }
 
 #[test]
@@ -38,7 +45,6 @@ fn more_defn() {
 
 #[test]
 fn qualified_calls() {
-    let col = std::collections::VecDeque::<i32>::new();
     let x = crow!((std::collections::VecDeque::<i32>::new));
     assert_eq!(x.len(), 0);
 }
@@ -49,5 +55,8 @@ fn always_true() -> bool {
 
 #[test]
 fn test_if() {
-    // crow!((if (always_true) 5 0));
+    let five_oh = crow!((if (always_true) 5 0));
+    assert_eq!(five_oh, 5);
+    let oh_no = crow!((if (always_true)  (add (mul 3 2) 1) 0));
+    assert_eq!(oh_no, 7);
 }

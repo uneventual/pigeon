@@ -1,20 +1,18 @@
-use crate::codegen::{CodeErrorInstance, Func, FuncDef, FuncSig, LetAssignments, LetBlock, ValId};
+use crate::codegen::{Func, FuncDef, FuncSig, LetAssignments, LetBlock};
 use crate::explicit_types::{FuncStart, Type, TypesList};
 use anyhow::Result;
 use proc_macro2::{Delimiter, Group, TokenTree};
 use syn::parse::Parse;
 use syn::parse2;
-use syn::spanned::Spanned;
 
 use crate::codegen::{CodeError, SyntaxErrorable};
-use proc_macro2::{Literal, TokenStream};
+use proc_macro2::Literal;
 
 #[derive(Clone, Debug)]
 pub enum SIRNode {
     Func(Func),
     Ident(String),
     Literal(Literal),
-    Stat(ValId),
     FuncDef(FuncDef),
     LetBlock(LetBlock),
     Ref(Box<SIRNode>),
@@ -162,8 +160,6 @@ impl SIRParse for Group {
 
         let name_st = funcstart.start;
 
-        // eprintln!("rest_out: {:?}", st);
-
         match name_st.to_string().as_str() {
             "fn" => return Ok(fn_ast(group)?.into()),
             "let" => return Ok(let_ast(group)?.into()),
@@ -171,7 +167,7 @@ impl SIRParse for Group {
                 let ifparse = parse2(funcstart.rest.clone());
                 let if_unerror = match ifparse {
                     Ok(v) => Ok(v),
-                    Err(e) => Err(group.error("failed to parse if statement")),
+                    Err(_) => Err(group.error("failed to parse if statement")),
                 }?;
                 return Ok(SIRNode::IfBlock(if_unerror));
             }
@@ -199,7 +195,6 @@ impl SIRParse for Group {
                 evvec.push(sir);
             }
         }
-        // let evvec: Result<Vec<SIRNode>, CodeError> = st.skip(1).map(|m| m.to_sir()).collect();
         Ok(SIRNode::Func(Func {
             name: name_st,
             args: evvec,

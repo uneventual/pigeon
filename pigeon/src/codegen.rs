@@ -9,58 +9,6 @@ use crate::parse::{IfBlock, SIRNode};
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
 
-pub fn ssa_block(ast: SIRNode) -> TokenStream {
-    let mut bfs = vec![ast];
-
-    let mut i: usize = 0;
-    while i < bfs.len() {
-        let mut block_vector = {
-            let mut addr = bfs.len();
-            let b = &mut bfs[i];
-            let mut bv: Vec<SIRNode> = vec![];
-            if let SIRNode::Func(func) = b {
-                for arg in func.args.iter_mut() {
-                    bv.push(arg.clone());
-                    *arg = SIRNode::Stat(ValId::Reference(addr));
-                    addr += 1;
-                }
-            };
-            bv
-        };
-
-        bfs.append(&mut block_vector);
-        i += 1;
-    }
-
-    let mut stream = TokenStream::new();
-
-    for (i, ev) in bfs.into_iter().enumerate().rev() {
-        stream.extend(letline(ev, i));
-    }
-
-    stream.extend(usize_name(0));
-
-    let ret = quote!({ #stream });
-
-    ret
-}
-
-fn usize_name(id: usize) -> TokenStream {
-    let idf = format_ident!("__{}", id);
-    quote!(#idf)
-}
-
-fn letline(ev: SIRNode, num: usize) -> TokenStream {
-    let noname = usize_name(num);
-    eprintln!("letline invoked for {:?}", ev);
-    quote!(let #noname = #ev ;)
-}
-
-#[derive(Clone, Debug)]
-pub enum ValId {
-    Reference(usize),
-}
-
 impl ToTokens for Func {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let func = self;
@@ -68,15 +16,6 @@ impl ToTokens for Func {
         let name = &func.name;
         let quo = quote!(#name(#(#args),*));
         tokens.extend(quo);
-    }
-}
-
-impl ToTokens for ValId {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let tok = match self {
-            Self::Reference(r) => usize_name(*r),
-        };
-        tokens.extend(tok);
     }
 }
 
@@ -116,7 +55,7 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct CodeError {
-    // guaranteed to be nonempty
+    // ought to be guaranteed to be nonempty; make a constructor
     errors: Vec<CodeErrorInstance>,
 }
 
@@ -260,13 +199,16 @@ impl ToTokens for LetAssignment {
     }
 }
 
-fn letblock(lb: &LetBlock) -> TokenStream {
-    let body = lb.body.clone().into_iter().map(ssa_block);
-    let blocks = lb.assignments.0.iter();
+impl ToTokens for LetBlock {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let body = self.body.clone().into_iter().map(|f| quote!({ #f }));
+        let blocks = self.assignments.0.iter();
 
-    let _last_b: Option<SIRNode> = None;
+        let _last_b: Option<SIRNode> = None;
 
-    quote!({ #(#blocks)*  { #(#body)* } };)
+        let quo = quote!({ #(#blocks)*  { #(#body)* } });
+        tokens.extend(quo)
+    }
 }
 
 impl ToTokens for Type {
@@ -313,9 +255,8 @@ impl ToTokens for SIRNode {
                 quote!(#id)
             }
             SIRNode::Literal(l) => quote!(#l),
-            SIRNode::Stat(s) => quote!(#s),
             SIRNode::FuncDef(f) => quote!(#f),
-            SIRNode::LetBlock(l) => letblock(l),
+            SIRNode::LetBlock(l) => quote!(#l),
             SIRNode::Ref(r) => quote!(&#r),
             SIRNode::IfBlock(i) => quote!(#i),
             SIRNode::LoopBlock() => todo!(),
