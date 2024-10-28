@@ -4,8 +4,8 @@ use proc_macro2::{Delimiter, Group, Span, TokenTree};
 
 use crate::explicit_types::Type;
 
-use crate::parse::SIRNode;
 use crate::parse::SIRParse;
+use crate::parse::{IfBlock, SIRNode};
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
 
@@ -52,6 +52,7 @@ fn usize_name(id: usize) -> TokenStream {
 
 fn letline(ev: SIRNode, num: usize) -> TokenStream {
     let noname = usize_name(num);
+    eprintln!("letline invoked for {:?}", ev);
     quote!(let #noname = #ev ;)
 }
 
@@ -64,7 +65,7 @@ impl ToTokens for Func {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let func = self;
         let args = func.args.iter();
-        let name = format_ident!("{}", func.name);
+        let name = &func.name;
         let quo = quote!(#name(#(#args),*));
         tokens.extend(quo);
     }
@@ -115,6 +116,7 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct CodeError {
+    // guaranteed to be nonempty
     errors: Vec<CodeErrorInstance>,
 }
 
@@ -130,6 +132,15 @@ pub struct CodeErrorInstance {
     message: String,
     node: TokenTree,
     error_span: Option<Span>,
+}
+
+impl From<CodeError> for syn::Error {
+    fn from(value: CodeError) -> Self {
+        let first = value.errors.last().unwrap();
+        let node = first.node.clone();
+        let message = first.message.clone();
+        syn::Error::new_spanned(node, message)
+    }
 }
 
 impl From<CodeErrorInstance> for CodeError {
@@ -283,6 +294,16 @@ impl ToTokens for FuncDef {
     }
 }
 
+impl ToTokens for IfBlock {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let predicate = self.predicate.clone();
+        let true_arm = self.true_branch.clone();
+        let false_arm = self.false_branch.clone();
+        let ifblock = quote!(if #predicate {#true_arm} else {#false_arm});
+        tokens.extend(ifblock)
+    }
+}
+
 impl ToTokens for SIRNode {
     fn to_tokens(&self, stream: &mut proc_macro2::TokenStream) {
         let toks = match self {
@@ -296,6 +317,8 @@ impl ToTokens for SIRNode {
             SIRNode::FuncDef(f) => quote!(#f),
             SIRNode::LetBlock(l) => letblock(l),
             SIRNode::Ref(r) => quote!(&#r),
+            SIRNode::IfBlock(i) => quote!(#i),
+            SIRNode::LoopBlock() => todo!(),
         };
         stream.extend(toks);
     }
@@ -303,6 +326,6 @@ impl ToTokens for SIRNode {
 
 #[derive(Clone, Debug)]
 pub struct Func {
-    pub name: String,
+    pub name: TokenStream,
     pub args: Vec<SIRNode>,
 }

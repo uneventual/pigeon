@@ -1,10 +1,13 @@
-use crate::codegen::{Func, FuncDef, FuncSig, LetAssignments, LetBlock, ValId};
-use crate::explicit_types::{Type, TypesList};
+use crate::codegen::{CodeErrorInstance, Func, FuncDef, FuncSig, LetAssignments, LetBlock, ValId};
+use crate::explicit_types::{FuncStart, Type, TypesList};
 use anyhow::Result;
-use proc_macro2::{token_stream::IntoIter, Delimiter, Group, TokenTree};
+use proc_macro2::{Delimiter, Group, TokenTree};
+use syn::parse::Parse;
+use syn::parse2;
+use syn::spanned::Spanned;
 
 use crate::codegen::{CodeError, SyntaxErrorable};
-use proc_macro2::Literal;
+use proc_macro2::{Literal, TokenStream};
 
 #[derive(Clone, Debug)]
 pub enum SIRNode {
@@ -15,6 +18,15 @@ pub enum SIRNode {
     FuncDef(FuncDef),
     LetBlock(LetBlock),
     Ref(Box<SIRNode>),
+    IfBlock(IfBlock),
+    LoopBlock(),
+}
+
+#[derive(Clone, Debug)]
+pub struct IfBlock {
+    pub predicate: Box<SIRNode>,
+    pub true_branch: Box<SIRNode>,
+    pub false_branch: Box<SIRNode>,
 }
 
 fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
@@ -80,6 +92,14 @@ fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
     })
 }
 
+// loop
+
+// if
+//
+// map
+//
+// quasiquote
+
 fn let_ast(group: &Group) -> Result<LetBlock, CodeError> {
     let mut st = group.stream().into_iter();
 
@@ -112,23 +132,14 @@ impl SIRParse for TokenTree {
     }
 }
 
-fn eat_puncts(it: IntoIter) -> String {
-    it.filter(|i| matches!(i, TokenTree::Punct(_)))
-        .map(|i| i.to_string())
-        .collect::<String>()
-}
-
-fn eat_start(group: &Group) -> Result<String, CodeError> {
-    let mut st = group.stream().into_iter();
-
-    if let Some(first) = st.next() {
-        match first {
-            TokenTree::Ident(id) => Ok(id.to_string()),
-            TokenTree::Punct(p) => Ok(p.to_string() + &eat_puncts(st)),
-            _ => Err(group.error("invalid first argument")),
+impl Parse for SIRNode {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let its = input.parse::<TokenTree>()?;
+        let sir = its.to_sir();
+        match sir {
+            Ok(s) => return Ok(s),
+            Err(e) => return Err(e.into()),
         }
-    } else {
-        Err(group.error("empty group"))
     }
 }
 
@@ -140,13 +151,30 @@ impl SIRParse for Group {
                 group.error("We can only parse parenthesis groups. This is a compiler bug!")
             )?;
         }
-        let st = group.stream().into_iter();
 
-        let name_st = eat_start(group)?;
+        let funcstart = parse2::<FuncStart>(self.stream());
 
-        match name_st.as_str() {
+        if let Err(e) = funcstart {
+            return Err(group.error(&e.to_string()));
+        }
+
+        let funcstart = funcstart.unwrap();
+
+        let name_st = funcstart.start;
+
+        // eprintln!("rest_out: {:?}", st);
+
+        match name_st.to_string().as_str() {
             "fn" => return Ok(fn_ast(group)?.into()),
             "let" => return Ok(let_ast(group)?.into()),
+            "if" => {
+                let ifparse = parse2(funcstart.rest.clone());
+                let if_unerror = match ifparse {
+                    Ok(v) => Ok(v),
+                    Err(e) => Err(group.error("failed to parse if statement")),
+                }?;
+                return Ok(SIRNode::IfBlock(if_unerror));
+            }
             // "->" => return Ok(functype_ast(group).context("-> arm")?),
             _ => (),
         }
@@ -155,7 +183,7 @@ impl SIRParse for Group {
         // parts that are separated by punctuation and tries to parse them as types
         let mut evvec = vec![];
         let mut refdepth = 0;
-        for root in st.skip(1) {
+        for root in funcstart.rest {
             if let TokenTree::Punct(p) = &root {
                 if p.as_char() == '&' {
                     refdepth += 1;
