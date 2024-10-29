@@ -46,6 +46,12 @@ fn always_true() -> bool {
 }
 
 #[test]
+fn test_calling_inline_function() {
+    let res = crow!(( (fn [a b] [i32 i32 i32] (mul a (add b 1))) 7 10 ));
+    assert_eq!(77, res);
+}
+
+#[test]
 fn test_if() {
     let five_oh = crow!((if (always_true) 5 0));
     assert_eq!(five_oh, 5);

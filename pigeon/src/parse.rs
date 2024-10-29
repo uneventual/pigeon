@@ -63,10 +63,9 @@ impl Parse for SIRNode {
         }
 
         let fork = input.fork();
+        let tt_parsed = input.parse::<TokenTree>()?;
 
-        let its = input.parse::<TokenTree>()?;
-
-        Ok(match its {
+        Ok(match tt_parsed {
             TokenTree::Group(g) => Ok(SIRNode::FuncLike(parse2::<FuncLike>(g.stream())?)),
             TokenTree::Ident(_) => {
                 let ty = fork.parse::<Type>()?;
@@ -74,7 +73,7 @@ impl Parse for SIRNode {
                 let typestring = ty.to_token_stream();
                 Ok(SIRNode::Ident(typestring))
             }
-            TokenTree::Punct(_) => Err(its.error("punctuation not allowed here")),
+            TokenTree::Punct(_) => Err(tt_parsed.error("punctuation not allowed here")),
             TokenTree::Literal(l) => Ok(SIRNode::Literal(l.clone())),
         }?)
     }
@@ -122,7 +121,6 @@ impl Parse for FuncDef {
     }
 }
 
-// this needs to accept generic sirnodes as the first argument
 impl Parse for Func {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
         let fun = input.parse::<SIRNode>()?;
