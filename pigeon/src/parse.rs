@@ -1,9 +1,12 @@
 use crate::codegen::{Func, FuncDef, FuncSig, LetAssignments, LetBlock};
 use crate::explicit_types::{FuncStart, Type, TypesList};
-use anyhow::Result;
-use proc_macro2::{Delimiter, Group, TokenTree};
-use syn::parse::Parse;
-use syn::parse2;
+use anyhow::{Context, Result};
+use itertools::Itertools;
+use proc_macro2::{Delimiter, Group, Ident, TokenStream, TokenTree};
+use quote::quote;
+use syn::parse::{self, Lookahead1, Parse};
+use syn::token::Bracket;
+use syn::{parse2, Token};
 
 use crate::codegen::{CodeError, SyntaxErrorable};
 use proc_macro2::Literal;
@@ -25,69 +28,6 @@ pub struct IfBlock {
     pub predicate: Box<SIRNode>,
     pub true_branch: Box<SIRNode>,
     pub false_branch: Box<SIRNode>,
-}
-
-fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
-    let mut st = group.stream().into_iter();
-
-    // Skip the "fn" token
-    st.next();
-
-    // Parse the argument names
-    let args: Vec<String> = match st.next() {
-        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket => g
-            .stream()
-            .into_iter()
-            .filter_map(|tt| {
-                if let TokenTree::Ident(id) = tt {
-                    Some(id.to_string())
-                } else {
-                    None
-                }
-            })
-            .collect(),
-        _ => return Err(group.error("Expected argument list in brackets after function name")),
-    };
-
-    // Parse the types
-    let types = match st.next() {
-        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket => {
-            match syn::parse2::<TypesList>(g.stream()) {
-                Ok(types_list) => types_list,
-                Err(_) => return Err(group.error("Failed to parse types list")),
-            }
-        }
-        _ => return Err(group.error("Expected types list in brackets after argument list")),
-    };
-
-    // Parse the function body
-    let body = match st.next() {
-        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis => g.to_sir()?,
-        _ => return Err(group.error("Expected function body in parentheses")),
-    };
-
-    // Construct the FuncSig
-    let return_type = types
-        .0
-        .last()
-        .cloned()
-        .unwrap_or_else(|| Type(syn::parse_str("()").unwrap()));
-    let arg_types = types
-        .0
-        .iter()
-        .take(types.0.len() - 1)
-        .cloned()
-        .collect::<Vec<_>>();
-    let signature = FuncSig {
-        return_type,
-        args: args.into_iter().zip(arg_types).collect(),
-    };
-
-    // Construct the FuncDef
-    Ok(FuncDef {
-        body: vec![body],
-        signature,
-    })
 }
 
 fn let_ast(group: &Group) -> Result<LetBlock, CodeError> {
@@ -124,12 +64,52 @@ impl SIRParse for TokenTree {
 
 impl Parse for SIRNode {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        eprintln!("{}", input.to_string());
         let its = input.parse::<TokenTree>()?;
-        let sir = its.to_sir();
-        match sir {
-            Ok(s) => return Ok(s),
-            Err(e) => return Err(e.into()),
+        Ok(match its {
+            TokenTree::Group(g) => Ok(g.to_sir()?),
+            TokenTree::Ident(id) => Ok(SIRNode::Ident(id.to_string())),
+            TokenTree::Punct(_) => Err(its.error("punctuation not allowed here")),
+            TokenTree::Literal(l) => Ok(SIRNode::Literal(l.clone())),
+        }?)
+    }
+}
+
+struct IdentList(Vec<String>);
+
+impl Parse for IdentList {
+    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        let mut idents = Vec::new();
+        while !input.is_empty() {
+            let id = input.parse::<Ident>()?;
+            idents.push(id.to_string())
         }
+        Ok(IdentList(idents))
+    }
+}
+
+impl Parse for FuncDef {
+    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(Token![fn]) {
+            let _ = input.parse::<Token![fn]>()?;
+        }
+        let argslist = parse2::<IdentList>(input.parse::<Group>()?.stream()).unwrap();
+        let typeslist = parse2::<TypesList>(input.parse::<Group>()?.stream())?;
+        let body = vec![input.parse::<SIRNode>().unwrap()];
+
+        let (last, rest) = typeslist.0.split_last().unwrap();
+
+        Ok(FuncDef {
+            body,
+            signature: FuncSig {
+                return_type: last.clone(),
+                args: argslist
+                    .0
+                    .into_iter()
+                    .zip(rest.iter().cloned())
+                    .collect_vec(),
+            },
+        })
     }
 }
 
@@ -153,15 +133,13 @@ impl SIRParse for Group {
         let name_st = funcstart.start;
 
         match name_st.to_string().as_str() {
-            "fn" => return Ok(fn_ast(group)?.into()),
+            "fn" => return Ok(SIRNode::FuncDef(parse2::<FuncDef>(self.stream()).unwrap())),
             "let" => return Ok(let_ast(group)?.into()),
             "if" => {
-                let ifparse = parse2(funcstart.rest.clone());
-                let if_unerror = match ifparse {
-                    Ok(v) => Ok(v),
-                    Err(_) => Err(group.error("failed to parse if statement")),
-                }?;
-                return Ok(SIRNode::IfBlock(if_unerror));
+                return Ok(SIRNode::IfBlock(
+                    parse2::<IfBlock>(funcstart.rest.clone())
+                        .map_err(|_| group.error("if statement parse failed"))?,
+                ))
             }
             // "->" => return Ok(functype_ast(group).context("-> arm")?),
             _ => (),
@@ -196,4 +174,21 @@ impl SIRParse for Group {
 
 pub trait SIRParse {
     fn to_sir(&self) -> Result<SIRNode, CodeError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use quote::quote;
+
+    use super::*;
+
+    #[test]
+    fn parse_typeslist_test() {
+        let quoth = quote!( (fn [a b] [i32 i32 i32] (mul a (add b 1))) );
+        let group = parse2::<Group>(quoth).unwrap();
+        let parsed = parse2::<FuncDef>(group.stream());
+
+        assert!(parsed.is_ok());
+        eprintln!("parsed");
+    }
 }
