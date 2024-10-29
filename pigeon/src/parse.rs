@@ -30,26 +30,6 @@ pub struct IfBlock {
     pub false_branch: Box<SIRNode>,
 }
 
-fn let_ast(group: &Group) -> Result<LetBlock, CodeError> {
-    let mut st = group.stream().into_iter();
-
-    st.next();
-    let letblock = st
-        .next()
-        .ok_or(group.error("let blocks require a valid [name assignment] block"))?;
-    let letblock_parsed: Result<LetAssignments, CodeError> = match letblock {
-        TokenTree::Group(g) => (&g).try_into(),
-        _ => Err(letblock.error("let blocks require a valid [name assignment] block")),
-    };
-
-    let evaluables: Result<Vec<SIRNode>, CodeError> = st.map(|f| f.to_sir()).collect();
-
-    Ok(LetBlock {
-        assignments: letblock_parsed?,
-        body: evaluables?,
-    })
-}
-
 impl Parse for LetBlock {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
         if input.peek(Token![let]) {
