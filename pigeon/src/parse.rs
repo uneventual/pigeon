@@ -5,7 +5,7 @@ use itertools::Itertools;
 use proc_macro2::{Delimiter, Group, Ident, TokenStream, TokenTree};
 use quote::quote;
 use syn::parse::{self, Lookahead1, Parse};
-use syn::token::Bracket;
+use syn::token::{self, Bracket};
 use syn::{parse2, Token};
 
 use crate::codegen::{CodeError, SyntaxErrorable};
@@ -93,9 +93,13 @@ impl Parse for FuncDef {
         if input.peek(Token![fn]) {
             let _ = input.parse::<Token![fn]>()?;
         }
-        let argslist = parse2::<IdentList>(input.parse::<Group>()?.stream()).unwrap();
+        let argslist = parse2::<IdentList>(input.parse::<Group>()?.stream())?;
         let typeslist = parse2::<TypesList>(input.parse::<Group>()?.stream())?;
-        let body = vec![input.parse::<SIRNode>().unwrap()];
+        let mut body = vec![];
+
+        while let Ok(n) = input.parse::<SIRNode>() {
+            body.push(n);
+        }
 
         let (last, rest) = typeslist.0.split_last().unwrap();
 
