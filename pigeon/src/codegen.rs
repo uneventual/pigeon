@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use proc_macro2::token_stream::TokenStream;
-use proc_macro2::{Delimiter, Group, Span, TokenTree};
+use proc_macro2::{Delimiter, Group, Ident, Span, TokenTree};
+use syn::parse::Parse;
 
 use crate::explicit_types::Type;
 
@@ -49,6 +50,24 @@ pub struct LetAssignment {
 
 #[derive(Clone, Debug)]
 pub struct LetAssignments(Vec<LetAssignment>);
+
+impl Parse for LetAssignments {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut assignments = vec![];
+        while let Ok(la) = input.parse::<LetAssignment>() {
+            assignments.push(la);
+        }
+        Ok(LetAssignments(assignments))
+    }
+}
+
+impl Parse for LetAssignment {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let name = input.parse::<Ident>()?.to_string();
+        let val = input.parse::<SIRNode>()?;
+        Ok(LetAssignment { name, val })
+    }
+}
 
 use std::error::Error;
 use std::fmt::Display;

@@ -6,7 +6,7 @@ use proc_macro2::{Delimiter, Group, Ident, TokenStream, TokenTree};
 use quote::quote;
 use syn::parse::{self, Lookahead1, Parse};
 use syn::token::{self, Bracket};
-use syn::{parse2, Token};
+use syn::{parenthesized, parse2, Token};
 
 use crate::codegen::{CodeError, SyntaxErrorable};
 use proc_macro2::Literal;
@@ -48,6 +48,27 @@ fn let_ast(group: &Group) -> Result<LetBlock, CodeError> {
         assignments: letblock_parsed?,
         body: evaluables?,
     })
+}
+
+impl Parse for LetBlock {
+    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(Token![let]) {
+            input.parse::<Token![let]>()?;
+        }
+
+        let letblock = input.parse::<Group>()?;
+        let letblock_parsed = parse2::<LetAssignments>(letblock.stream())?;
+
+        let mut body = vec![];
+        while let Ok(sn) = input.parse::<SIRNode>() {
+            body.push(sn);
+        }
+
+        Ok(LetBlock {
+            assignments: letblock_parsed,
+            body,
+        })
+    }
 }
 
 impl SIRParse for TokenTree {
@@ -138,7 +159,11 @@ impl SIRParse for Group {
 
         match name_st.to_string().as_str() {
             "fn" => return Ok(SIRNode::FuncDef(parse2::<FuncDef>(self.stream()).unwrap())),
-            "let" => return Ok(let_ast(group)?.into()),
+            "let" => {
+                return Ok(SIRNode::LetBlock(
+                    parse2::<LetBlock>(self.stream()).unwrap(),
+                ))
+            }
             "if" => {
                 return Ok(SIRNode::IfBlock(
                     parse2::<IfBlock>(funcstart.rest.clone())
