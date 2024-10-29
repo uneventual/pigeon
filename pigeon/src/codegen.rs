@@ -6,7 +6,7 @@ use syn::parse::Parse;
 use crate::explicit_types::Type;
 
 use crate::parse::SIRParse;
-use crate::parse::{IfBlock, SIRNode};
+use crate::parse::{FuncLike, IfBlock, SIRNode};
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
 
@@ -30,10 +30,6 @@ pub struct FuncDef {
 pub struct FuncSig {
     pub return_type: Type,
     pub args: Vec<(String, Type)>,
-}
-
-trait BSDebug {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 }
 
 #[derive(Clone, Debug)]
@@ -121,35 +117,35 @@ impl Display for CodeError {
 
 impl Error for CodeError {}
 
-impl TryFrom<&Group> for LetAssignments {
-    type Error = CodeError;
-    fn try_from(value: &Group) -> std::result::Result<Self, Self::Error> {
-        if !matches!(value.delimiter(), Delimiter::Bracket) {
-            return Err(value.error("let block must be delimited by [square brackets]"));
-        }
+// impl TryFrom<&Group> for LetAssignments {
+//     type Error = CodeError;
+//     fn try_from(value: &Group) -> std::result::Result<Self, Self::Error> {
+//         if !matches!(value.delimiter(), Delimiter::Bracket) {
+//             return Err(value.error("let block must be delimited by [square brackets]"));
+//         }
 
-        let x: Result<Vec<_>, Self::Error> = value
-            .stream()
-            .into_iter()
-            .chunks(2)
-            .into_iter()
-            .map(|mut vv| {
-                let err = value.error("unmatched pairs in let block");
+//         let x: Result<Vec<_>, Self::Error> = value
+//             .stream()
+//             .into_iter()
+//             .chunks(2)
+//             .into_iter()
+//             .map(|mut vv| {
+//                 let err = value.error("unmatched pairs in let block");
 
-                let name = vv
-                    .next()
-                    .ok_or(err.clone())?
-                    .ident_string()
-                    .context(value.error("let blocks require [ident sexpr] pairs"))?;
-                let value = vv.next().ok_or(err.clone())?.to_sir()?;
+//                 let name = vv
+//                     .next()
+//                     .ok_or(err.clone())?
+//                     .ident_string()
+//                     .context(value.error("let blocks require [ident sexpr] pairs"))?;
+//                 let value = vv.next().ok_or(err.clone())?.to_sir()?;
 
-                Ok(LetAssignment { name, val: value })
-            })
-            .collect();
+//                 Ok(LetAssignment { name, val: value })
+//             })
+//             .collect();
 
-        Ok(LetAssignments(x?))
-    }
-}
+//         Ok(LetAssignments(x?))
+//     }
+// }
 
 pub trait IdentString {
     fn ident_string(&self) -> Result<String, CodeError>;
@@ -194,18 +190,6 @@ impl<T: Into<TokenTree> + Clone> SyntaxErrorable for T {
             error_span: None,
         }
         .into()
-    }
-}
-
-impl From<LetBlock> for SIRNode {
-    fn from(value: LetBlock) -> Self {
-        SIRNode::LetBlock(value)
-    }
-}
-
-impl From<FuncDef> for SIRNode {
-    fn from(value: FuncDef) -> Self {
-        SIRNode::FuncDef(value)
     }
 }
 
@@ -265,20 +249,29 @@ impl ToTokens for IfBlock {
     }
 }
 
+impl ToTokens for FuncLike {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let toks = match self {
+            FuncLike::FuncDef(func_def) => quote!(#func_def),
+            FuncLike::LetBlock(let_block) => quote!(#let_block),
+            FuncLike::Func(func) => quote!(#func),
+            FuncLike::IfBlock(if_block) => quote!(#if_block),
+            FuncLike::LoopBlock() => todo!(),
+        };
+        tokens.extend(toks);
+    }
+}
+
 impl ToTokens for SIRNode {
     fn to_tokens(&self, stream: &mut proc_macro2::TokenStream) {
         let toks = match self {
-            SIRNode::Func(f) => quote!(#f),
             SIRNode::Ident(s) => {
                 let id = format_ident!("{}", s);
                 quote!(#id)
             }
             SIRNode::Literal(l) => quote!(#l),
-            SIRNode::FuncDef(f) => quote!(#f),
-            SIRNode::LetBlock(l) => quote!(#l),
             SIRNode::Ref(r) => quote!(&#r),
-            SIRNode::IfBlock(i) => quote!(#i),
-            SIRNode::LoopBlock() => todo!(),
+            SIRNode::FuncLike(f) => quote!(#f),
         };
         stream.extend(toks);
     }

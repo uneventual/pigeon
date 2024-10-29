@@ -1,8 +1,10 @@
 extern crate proc_macro;
 
 use crate::parse::SIRParse;
-use proc_macro2::{token_stream::TokenStream, TokenTree};
+use parse::SIRNode;
+use proc_macro2::{token_stream::TokenStream, Delimiter, Group, TokenTree};
 use quote::quote;
+use syn::parse2;
 
 mod codegen;
 mod explicit_types;
@@ -15,7 +17,7 @@ pub fn crow(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 fn crow2(ts: TokenStream) -> TokenStream {
     if let Some(TokenTree::Group(root)) = ts.into_iter().next() {
-        let ast_result = root.to_sir();
+        let ast_result = parse2::<SIRNode>(quote!(#root));
         match ast_result {
             Ok(ast) => {
                 quote!({ #ast })

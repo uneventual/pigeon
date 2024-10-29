@@ -64,6 +64,9 @@ pub struct FuncStart {
 
 impl Parse for IfBlock {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(Token![if]) {
+            let _ = input.parse::<Token![if]>();
+        }
         let predicate = Box::new(input.parse::<SIRNode>()?);
         let true_branch = Box::new(input.parse::<SIRNode>()?);
         let false_branch = Box::new(input.parse::<SIRNode>()?);
