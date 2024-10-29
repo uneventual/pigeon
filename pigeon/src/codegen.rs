@@ -203,10 +203,7 @@ impl ToTokens for FuncLike {
 impl ToTokens for SIRNode {
     fn to_tokens(&self, stream: &mut proc_macro2::TokenStream) {
         let toks = match self {
-            SIRNode::Ident(s) => {
-                let id = format_ident!("{}", s);
-                quote!(#id)
-            }
+            SIRNode::Ident(s) => s.clone(),
             SIRNode::Literal(l) => quote!(#l),
             SIRNode::Ref(r) => quote!(&#r),
             SIRNode::FuncLike(f) => quote!(#f),
