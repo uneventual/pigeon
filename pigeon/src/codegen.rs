@@ -1,11 +1,9 @@
-use itertools::Itertools;
 use proc_macro2::token_stream::TokenStream;
-use proc_macro2::{Delimiter, Group, Ident, Span, TokenTree};
+use proc_macro2::{Ident, Span, TokenTree};
 use syn::parse::Parse;
 
 use crate::explicit_types::Type;
 
-use crate::parse::SIRParse;
 use crate::parse::{FuncLike, IfBlock, SIRNode};
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
@@ -116,66 +114,6 @@ impl Display for CodeError {
 }
 
 impl Error for CodeError {}
-
-// impl TryFrom<&Group> for LetAssignments {
-//     type Error = CodeError;
-//     fn try_from(value: &Group) -> std::result::Result<Self, Self::Error> {
-//         if !matches!(value.delimiter(), Delimiter::Bracket) {
-//             return Err(value.error("let block must be delimited by [square brackets]"));
-//         }
-
-//         let x: Result<Vec<_>, Self::Error> = value
-//             .stream()
-//             .into_iter()
-//             .chunks(2)
-//             .into_iter()
-//             .map(|mut vv| {
-//                 let err = value.error("unmatched pairs in let block");
-
-//                 let name = vv
-//                     .next()
-//                     .ok_or(err.clone())?
-//                     .ident_string()
-//                     .context(value.error("let blocks require [ident sexpr] pairs"))?;
-//                 let value = vv.next().ok_or(err.clone())?.to_sir()?;
-
-//                 Ok(LetAssignment { name, val: value })
-//             })
-//             .collect();
-
-//         Ok(LetAssignments(x?))
-//     }
-// }
-
-pub trait IdentString {
-    fn ident_string(&self) -> Result<String, CodeError>;
-}
-
-impl IdentString for TokenTree {
-    fn ident_string(&self) -> Result<String, CodeError> {
-        if let TokenTree::Ident(i) = self {
-            Ok(i.to_string())
-        } else {
-            Err(self.error(&format!("\"{}\" is not an ident", self)))
-        }
-    }
-}
-
-trait Contextable<T> {
-    fn context(self, context: CodeError) -> Result<T, CodeError>;
-}
-
-impl<T> Contextable<T> for Result<T, CodeError> {
-    fn context(self, context: CodeError) -> Result<T, CodeError> {
-        match self {
-            Ok(s) => Ok(s),
-            Err(mut s) => {
-                s.errors.extend(context.errors);
-                Err(s)
-            }
-        }
-    }
-}
 
 pub trait SyntaxErrorable {
     fn error(&self, message: &str) -> CodeError;

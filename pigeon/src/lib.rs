@@ -1,8 +1,7 @@
 extern crate proc_macro;
 
-use crate::parse::SIRParse;
 use parse::SIRNode;
-use proc_macro2::{token_stream::TokenStream, Delimiter, Group, TokenTree};
+use proc_macro2::{token_stream::TokenStream, TokenTree};
 use quote::quote;
 use syn::parse2;
 

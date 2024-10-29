@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
 use crate::parse::{IfBlock, SIRNode};
-use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{parse::Parse, Token};
 
@@ -57,11 +56,6 @@ impl Parse for TypesList {
     }
 }
 
-pub struct FuncStart {
-    pub start: TokenStream,
-    pub rest: TokenStream,
-}
-
 impl Parse for IfBlock {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         if input.peek(Token![if]) {
@@ -74,32 +68,6 @@ impl Parse for IfBlock {
             predicate,
             true_branch,
             false_branch,
-        })
-    }
-}
-
-impl Parse for FuncStart {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut toks = TokenStream::new();
-        let lookahead = input.lookahead1();
-        if lookahead.peek(Token![fn]) {
-            let tok = input.parse::<Token![fn]>()?;
-            tok.to_tokens(&mut toks);
-        } else if lookahead.peek(Token![let]) {
-            let tok = input.parse::<Token![let]>()?;
-            tok.to_tokens(&mut toks);
-        } else if lookahead.peek(Token![if]) {
-            let tok = input.parse::<Token![if]>()?;
-            tok.to_tokens(&mut toks);
-        } else if let Ok(ty) = input.parse::<Type>() {
-            ty.to_tokens(&mut toks);
-        };
-
-        let ts = input.parse::<TokenStream>()?;
-
-        Ok(FuncStart {
-            start: toks,
-            rest: ts,
         })
     }
 }

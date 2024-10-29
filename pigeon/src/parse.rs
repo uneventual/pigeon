@@ -1,12 +1,12 @@
 use crate::codegen::{Func, FuncDef, FuncSig, LetAssignments, LetBlock};
-use crate::explicit_types::{FuncStart, TypesList};
+use crate::explicit_types::TypesList;
 use itertools::Itertools;
-use proc_macro2::{Delimiter, Group, Ident, TokenTree};
+use proc_macro2::{Group, Ident, TokenTree};
 use quote::ToTokens;
 use syn::parse::{self, Parse};
 use syn::{parse2, Token};
 
-use crate::codegen::{CodeError, SyntaxErrorable};
+use crate::codegen::SyntaxErrorable;
 use proc_macro2::Literal;
 
 #[derive(Clone, Debug)]
@@ -53,18 +53,6 @@ impl Parse for LetBlock {
         })
     }
 }
-
-// impl SIRParse for TokenTree {
-//     fn to_sir(&self) -> Result<SIRNode, CodeError> {
-//         let tt = self;
-//         match tt {
-//             TokenTree::Group(g) => Ok(g.to_sir()?),
-//             TokenTree::Ident(id) => Ok(SIRNode::Ident(id.to_string())),
-//             TokenTree::Punct(_) => Err(self.error("punctuation not allowed here")),
-//             TokenTree::Literal(l) => Ok(SIRNode::Literal(l.clone())),
-//         }
-//     }
-// }
 
 impl Parse for SIRNode {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -224,10 +212,6 @@ impl Parse for FuncLike {
 //         })))
 //     }
 // }
-
-pub trait SIRParse {
-    fn to_sir(&self) -> Result<SIRNode, CodeError>;
-}
 
 #[cfg(test)]
 mod tests {
