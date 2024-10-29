@@ -1,12 +1,10 @@
 use crate::codegen::{Func, FuncDef, FuncSig, LetAssignments, LetBlock};
-use crate::explicit_types::{FuncStart, Type, TypesList};
-use anyhow::{Context, Result};
+use crate::explicit_types::{FuncStart, TypesList};
+use anyhow::{Result};
 use itertools::Itertools;
-use proc_macro2::{Delimiter, Group, Ident, TokenStream, TokenTree};
-use quote::quote;
-use syn::parse::{self, Lookahead1, Parse};
-use syn::token::{self, Bracket};
-use syn::{parenthesized, parse2, Token};
+use proc_macro2::{Delimiter, Group, Ident, TokenTree};
+use syn::parse::{self, Parse};
+use syn::{parse2, Token};
 
 use crate::codegen::{CodeError, SyntaxErrorable};
 use proc_macro2::Literal;
@@ -65,7 +63,7 @@ impl SIRParse for TokenTree {
 
 impl Parse for SIRNode {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        eprintln!("{}", input.to_string());
+        eprintln!("{}", input);
         let its = input.parse::<TokenTree>()?;
         Ok(match its {
             TokenTree::Group(g) => Ok(g.to_sir()?),

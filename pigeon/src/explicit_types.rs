@@ -67,11 +67,11 @@ impl Parse for IfBlock {
         let predicate = Box::new(input.parse::<SIRNode>()?);
         let true_branch = Box::new(input.parse::<SIRNode>()?);
         let false_branch = Box::new(input.parse::<SIRNode>()?);
-        return Ok(IfBlock {
+        Ok(IfBlock {
             predicate,
             true_branch,
             false_branch,
-        });
+        })
     }
 }
 
