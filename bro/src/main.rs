@@ -36,9 +36,9 @@ fn main() {
 
     let five_oh = crow!((if (always_true) (always_one) (always_zero)));
 
-    let oh_no = crow!((if (always_true)  (add (mul 3 2) 1) 0));
+    let _oh_no = crow!((if (always_true)  (add (mul 3 2) 1) 0));
     assert_eq!(five_oh, 1);
-    let x = crow!((let [a 11 b 4 c 3] (mul a (add b c))));
+    let _x = crow!((let [a 11 b 4 c 3] (mul a (add b c))));
     // assert_eq!(77, x)
     assert_eq!(
         {

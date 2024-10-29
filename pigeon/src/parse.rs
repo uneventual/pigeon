@@ -90,14 +90,6 @@ fn fn_ast(group: &Group) -> Result<FuncDef, CodeError> {
     })
 }
 
-// loop
-
-// if
-//
-// map
-//
-// quasiquote
-
 fn let_ast(group: &Group) -> Result<LetBlock, CodeError> {
     let mut st = group.stream().into_iter();
 
