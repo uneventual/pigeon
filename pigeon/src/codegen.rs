@@ -1,10 +1,11 @@
 use proc_macro2::token_stream::TokenStream;
 use proc_macro2::{Ident, Span, TokenTree};
 use syn::parse::Parse;
+use syn::token::Loop;
 
 use crate::explicit_types::Type;
 
-use crate::parse::{FuncLike, IfBlock, SIRNode};
+use crate::parse::{FuncLike, IfBlock, LoopBlock, RecurBlock, SIRNode};
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
 
@@ -38,12 +39,13 @@ pub struct LetBlock {
 
 #[derive(Clone, Debug)]
 pub struct LetAssignment {
+    pub mutable: bool,
     pub name: String,
     pub val: SIRNode,
 }
 
 #[derive(Clone, Debug)]
-pub struct LetAssignments(Vec<LetAssignment>);
+pub struct LetAssignments(pub Vec<LetAssignment>);
 
 impl Parse for LetAssignments {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -59,75 +61,11 @@ impl Parse for LetAssignment {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let name = input.parse::<Ident>()?.to_string();
         let val = input.parse::<SIRNode>()?;
-        Ok(LetAssignment { name, val })
-    }
-}
-
-use std::error::Error;
-use std::fmt::Display;
-
-#[derive(Debug, Clone)]
-pub struct CodeError {
-    // ought to be guaranteed to be nonempty; make a constructor
-    errors: Vec<CodeErrorInstance>,
-}
-
-impl CodeError {
-    pub fn span(&self) -> Span {
-        let last_error = self.errors.last().unwrap();
-        last_error.error_span.unwrap_or(last_error.node.span())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CodeErrorInstance {
-    message: String,
-    node: TokenTree,
-    error_span: Option<Span>,
-}
-
-impl From<CodeError> for syn::Error {
-    fn from(value: CodeError) -> Self {
-        let first = value.errors.last().unwrap();
-        let node = first.node.clone();
-        let message = first.message.clone();
-        syn::Error::new_spanned(node, message)
-    }
-}
-
-impl From<CodeErrorInstance> for CodeError {
-    fn from(value: CodeErrorInstance) -> Self {
-        CodeError {
-            errors: vec![value],
-        }
-    }
-}
-
-impl Display for CodeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Error: ")?;
-        for e in &self.errors {
-            f.write_fmt(format_args!("{} \n", e.message))?;
-        }
-        Ok(())
-    }
-}
-
-impl Error for CodeError {}
-
-pub trait SyntaxErrorable {
-    fn error(&self, message: &str) -> CodeError;
-}
-
-impl<T: Into<TokenTree> + Clone> SyntaxErrorable for T {
-    fn error(&self, message: &str) -> CodeError {
-        let t: TokenTree = self.clone().into();
-        CodeErrorInstance {
-            message: message.to_string(),
-            node: t,
-            error_span: None,
-        }
-        .into()
+        Ok(LetAssignment {
+            name,
+            val,
+            mutable: false,
+        })
     }
 }
 
@@ -135,8 +73,30 @@ impl ToTokens for LetAssignment {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let name = format_ident!("{}", self.name);
         let val = &self.val;
-        let quote = quote!(let #name = #val;);
+        let quote = if self.mutable {
+            quote!(let mut #name = #val;)
+        } else {
+            quote!(let #name = #val;)
+        };
+
         tokens.extend(quote);
+    }
+}
+
+const PIGEON_LOOP_RETURN: &str = "___pigeon_loop_return";
+
+impl ToTokens for LoopBlock {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let body = self.0.body.clone().into_iter().map(|f| quote!({ #f }));
+        let blocks = self.0.assignments.0.iter();
+
+        let _last_b: Option<SIRNode> = None;
+
+        let cont = format_ident!("{}", PIGEON_RECUR_CONTINUE);
+        let return_placeholder = format_ident!("{}", PIGEON_LOOP_RETURN);
+
+        let quo = quote!({ #(#blocks)* let mut #cont = true; let mut #return_placeholder: Option<_> = None; while #cont { #cont = false; #return_placeholder = Some(#(#body)*);  } #return_placeholder.unwrap()});
+        tokens.extend(quo)
     }
 }
 
@@ -187,6 +147,41 @@ impl ToTokens for IfBlock {
     }
 }
 
+const PIGEON_RECUR_CONTINUE: &str = "___pigeon_loop_continue";
+
+struct RecurAssignment<'a>(&'a LetAssignment);
+
+impl<'a> From<&'a LetAssignment> for RecurAssignment<'a> {
+    fn from(value: &'a LetAssignment) -> Self {
+        RecurAssignment(value)
+    }
+}
+
+impl<'a> ToTokens for RecurAssignment<'a> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let name = format_ident!("{}", self.0.name);
+        let val = &self.0.val;
+        let quo = quote!(#name = #val;);
+
+        tokens.extend(quo);
+    }
+}
+
+impl ToTokens for RecurBlock {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let cont = format_ident!("{}", PIGEON_RECUR_CONTINUE);
+        tokens.extend(quote!(#cont = true;));
+
+        let blocks = self.0 .0.iter().map(|v| {
+            let x: RecurAssignment = v.into();
+            x
+        });
+
+        let quo = quote!( #(#blocks)*; continue;  );
+        tokens.extend(quo)
+    }
+}
+
 impl ToTokens for FuncLike {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let toks = match self {
@@ -194,7 +189,10 @@ impl ToTokens for FuncLike {
             FuncLike::LetBlock(let_block) => quote!(#let_block),
             FuncLike::Func(func) => quote!(#func),
             FuncLike::IfBlock(if_block) => quote!(#if_block),
-            FuncLike::LoopBlock() => todo!(),
+            FuncLike::LoopBlock(l) => {
+                quote!(#l)
+            }
+            FuncLike::RecurBlock(r) => quote!(#r),
         };
         tokens.extend(toks);
     }
@@ -209,6 +207,31 @@ impl ToTokens for SIRNode {
             SIRNode::FuncLike(f) => quote!(#f),
         };
         stream.extend(toks);
+    }
+}
+
+// just do loop/recur like clojure
+// trace down from loop
+// unconditionally return
+// top level and bottom level function
+
+fn trampoline() {
+    // we call it
+    // then inside we know what we return because it's inside the recur
+    //
+    let mut x = 0;
+    let mut y = 0;
+    let mut z = 0;
+    let mut cont = true;
+    let maybe = true;
+    while !cont {
+        cont = false;
+        let x = if maybe {
+            "HMM"
+        } else {
+            cont = true;
+            continue;
+        };
     }
 }
 

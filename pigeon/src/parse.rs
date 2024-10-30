@@ -7,7 +7,6 @@ use syn::parse::discouraged::Speculative;
 use syn::parse::{self, Parse};
 use syn::{parse2, Token, Type};
 
-use crate::codegen::SyntaxErrorable;
 use proc_macro2::Literal;
 
 #[derive(Clone, Debug)]
@@ -24,7 +23,42 @@ pub enum FuncLike {
     LetBlock(LetBlock),
     Func(Func),
     IfBlock(IfBlock),
-    LoopBlock(),
+    LoopBlock(LoopBlock),
+    RecurBlock(RecurBlock),
+}
+
+#[derive(Clone, Debug)]
+pub struct LoopBlock(pub LetBlock);
+
+#[derive(Clone, Debug)]
+pub struct RecurBlock(pub LetAssignments);
+
+impl Parse for RecurBlock {
+    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(syn::Ident) {
+            input.parse::<Ident>()?;
+        };
+
+        let letblock = input.parse::<Group>()?;
+        let letblock_parsed = parse2::<LetAssignments>(letblock.stream())?;
+
+        Ok(RecurBlock(letblock_parsed))
+    }
+}
+
+impl LoopBlock {
+    fn new(mut input: LetBlock) -> Self {
+        for a in input.assignments.0.iter_mut() {
+            a.mutable = true;
+        }
+        LoopBlock(input)
+    }
+}
+
+impl From<LoopBlock> for LetBlock {
+    fn from(value: LoopBlock) -> Self {
+        value.0
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -32,6 +66,17 @@ pub struct IfBlock {
     pub predicate: Box<SIRNode>,
     pub true_branch: Box<SIRNode>,
     pub false_branch: Box<SIRNode>,
+}
+
+impl Parse for LoopBlock {
+    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(Token![loop]) {
+            input.parse::<Token![loop]>()?;
+        }
+        let letblock = input.parse::<LetBlock>();
+
+        Ok(LoopBlock::new(letblock?))
+    }
 }
 
 impl Parse for LetBlock {
@@ -55,6 +100,7 @@ impl Parse for LetBlock {
     }
 }
 
+// TODO: Support negative numbers
 impl Parse for SIRNode {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         while input.peek(Token![&]) {
@@ -73,7 +119,7 @@ impl Parse for SIRNode {
                 let typestring = ty.to_token_stream();
                 Ok(SIRNode::Ident(typestring))
             }
-            TokenTree::Punct(_) => Err(tt_parsed.error("punctuation not allowed here")),
+            TokenTree::Punct(_) => Err(input.error("punctuation not allowed here")),
             TokenTree::Literal(l) => Ok(SIRNode::Literal(l.clone())),
         }?)
     }
@@ -154,6 +200,18 @@ impl Parse for FuncLike {
             let fl = input.parse::<IfBlock>();
             let fl = FuncLike::IfBlock(fl?);
             return Ok(fl);
+        }
+        if input.peek(Token![loop]) {
+            let fl = input.parse::<LoopBlock>();
+            let fl = FuncLike::LoopBlock(fl?);
+            return Ok(fl);
+        }
+        let fork = input.fork();
+        if let Ok(id) = fork.parse::<Ident>() {
+            if id.to_string() == "recur" {
+                input.advance_to(&fork);
+                return Ok(FuncLike::RecurBlock(input.parse::<RecurBlock>()?));
+            }
         }
 
         Ok(FuncLike::Func(input.parse::<Func>()?))
