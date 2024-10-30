@@ -1,7 +1,6 @@
 use proc_macro2::token_stream::TokenStream;
-use proc_macro2::{Ident, Span, TokenTree};
+use proc_macro2::{Ident};
 use syn::parse::Parse;
-use syn::token::Loop;
 
 use crate::explicit_types::Type;
 
@@ -219,9 +218,9 @@ fn trampoline() {
     // we call it
     // then inside we know what we return because it's inside the recur
     //
-    let mut x = 0;
-    let mut y = 0;
-    let mut z = 0;
+    let x = 0;
+    let y = 0;
+    let z = 0;
     let mut cont = true;
     let maybe = true;
     while !cont {

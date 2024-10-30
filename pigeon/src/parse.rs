@@ -7,7 +7,6 @@ use syn::parse::discouraged::Speculative;
 use syn::parse::{self, Parse};
 use syn::{parse2, LitFloat, LitInt, Token, Type};
 
-use proc_macro2::Literal;
 
 #[derive(Clone)]
 pub enum SIRNode {
@@ -119,7 +118,7 @@ impl Parse for SIRNode {
         let fork = input.fork();
         let tt_parsed = input.parse::<TokenTree>()?;
 
-        Ok(match tt_parsed {
+        match tt_parsed {
             TokenTree::Group(g) => Ok(SIRNode::FuncLike(parse2::<FuncLike>(g.stream())?)),
             TokenTree::Ident(_) => {
                 let ty = fork.parse::<Type>()?;
@@ -129,7 +128,7 @@ impl Parse for SIRNode {
             }
             TokenTree::Punct(_) => Err(input.error("punctuation not allowed here")),
             TokenTree::Literal(l) => Ok(SIRNode::Literal(syn::Lit::Verbatim(l.clone()))),
-        }?)
+        }
     }
 }
 
@@ -216,7 +215,7 @@ impl Parse for FuncLike {
         }
         let fork = input.fork();
         if let Ok(id) = fork.parse::<Ident>() {
-            if id.to_string() == "recur" {
+            if id == "recur" {
                 input.advance_to(&fork);
                 return Ok(FuncLike::RecurBlock(input.parse::<RecurBlock>()?));
             }
