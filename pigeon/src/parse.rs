@@ -101,7 +101,7 @@ impl Parse for LetBlock {
 // TODO: Support negative numbers
 impl Parse for SIRNode {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        while input.peek(Token![&]) {
+        if input.peek(Token![&]) {
             input.parse::<Token![&]>()?;
             return Ok(SIRNode::Ref(Box::new(input.parse::<SIRNode>()?)));
         }
@@ -189,7 +189,10 @@ impl Parse for FuncDef {
             body.push(n);
         }
 
-        let (last, rest) = typeslist.0.split_last().unwrap();
+        let (last, rest) = typeslist
+            .0
+            .split_last()
+            .ok_or_else(|| input.error("needs at least a return type"))?;
 
         Ok(FuncDef {
             body,
@@ -269,11 +272,5 @@ mod tests {
         let parsed = parse2::<FuncDef>(group.stream());
 
         assert!(parsed.is_ok());
-    }
-
-    #[test]
-    fn parse_numbers() {
-        let quoth = quote!(-1);
-        let parseg = parse2::<LitInt>(quoth).unwrap();
     }
 }

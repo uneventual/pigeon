@@ -61,10 +61,16 @@ fn test_loops() {
     assert_eq!(res, 10001);
 }
 
+fn addf(a: f32, b: f32) -> f32 {
+    a + b
+}
+
 #[test]
 fn test_negative_numbers() {
     let res = pigeon!((add 3 -1));
     assert_eq!(res, 2);
+    let res = pigeon!((addf 3.0 -1.0));
+    assert_eq!(res, 2.0);
 }
 
 #[test]

@@ -57,8 +57,6 @@ impl ToTokens for LoopBlock {
         let body = self.0.body.clone().into_iter().map(|f| quote!({ #f }));
         let blocks = self.0.assignments.0.iter();
 
-        let _last_b: Option<SIRNode> = None;
-
         let cont = format_ident!("{}", PIGEON_RECUR_CONTINUE);
         let return_placeholder = format_ident!("{}", PIGEON_LOOP_RETURN);
 
@@ -71,8 +69,6 @@ impl ToTokens for LetBlock {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let body = self.body.clone().into_iter().map(|f| quote!({ #f }));
         let blocks = self.assignments.0.iter();
-
-        let _last_b: Option<SIRNode> = None;
 
         let quo = quote!({ #(#blocks)*  { #(#body)* } });
         tokens.extend(quo)
