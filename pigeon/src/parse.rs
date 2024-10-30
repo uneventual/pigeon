@@ -1,4 +1,4 @@
-use crate::codegen::{Func, FuncDef, FuncSig, LetAssignments, LetBlock};
+use crate::codegen::{Func, FuncDef, FuncSig, LetBlock};
 use crate::explicit_types::TypesList;
 use itertools::Itertools;
 use proc_macro2::{Group, Ident, TokenStream, TokenTree};
@@ -6,7 +6,6 @@ use quote::ToTokens;
 use syn::parse::discouraged::Speculative;
 use syn::parse::{self, Parse};
 use syn::{parse2, LitFloat, LitInt, Token, Type};
-
 
 #[derive(Clone)]
 pub enum SIRNode {
@@ -142,6 +141,38 @@ impl Parse for IdentList {
             idents.push(id.to_string())
         }
         Ok(IdentList(idents))
+    }
+}
+
+#[derive(Clone)]
+pub struct LetAssignment {
+    pub mutable: bool,
+    pub name: String,
+    pub val: SIRNode,
+}
+
+#[derive(Clone)]
+pub struct LetAssignments(pub Vec<LetAssignment>);
+
+impl Parse for LetAssignments {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut assignments = vec![];
+        while let Ok(la) = input.parse::<LetAssignment>() {
+            assignments.push(la);
+        }
+        Ok(LetAssignments(assignments))
+    }
+}
+
+impl Parse for LetAssignment {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let name = input.parse::<Ident>()?.to_string();
+        let val = input.parse::<SIRNode>()?;
+        Ok(LetAssignment {
+            name,
+            val,
+            mutable: false,
+        })
     }
 }
 

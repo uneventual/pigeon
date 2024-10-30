@@ -1,10 +1,10 @@
 use proc_macro2::token_stream::TokenStream;
-use proc_macro2::Ident;
-use syn::parse::Parse;
 
 use crate::explicit_types::Type;
 
-use crate::parse::{FuncLike, IfBlock, LoopBlock, RecurBlock, SIRNode};
+use crate::parse::{
+    FuncLike, IfBlock, LetAssignment, LetAssignments, LoopBlock, RecurBlock, SIRNode,
+};
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
 
@@ -34,38 +34,6 @@ pub struct FuncSig {
 pub struct LetBlock {
     pub assignments: LetAssignments,
     pub body: Vec<SIRNode>,
-}
-
-#[derive(Clone)]
-pub struct LetAssignment {
-    pub mutable: bool,
-    pub name: String,
-    pub val: SIRNode,
-}
-
-#[derive(Clone)]
-pub struct LetAssignments(pub Vec<LetAssignment>);
-
-impl Parse for LetAssignments {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut assignments = vec![];
-        while let Ok(la) = input.parse::<LetAssignment>() {
-            assignments.push(la);
-        }
-        Ok(LetAssignments(assignments))
-    }
-}
-
-impl Parse for LetAssignment {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let name = input.parse::<Ident>()?.to_string();
-        let val = input.parse::<SIRNode>()?;
-        Ok(LetAssignment {
-            name,
-            val,
-            mutable: false,
-        })
-    }
 }
 
 impl ToTokens for LetAssignment {
