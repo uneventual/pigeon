@@ -1,5 +1,5 @@
 use proc_macro2::token_stream::TokenStream;
-use proc_macro2::{Ident};
+use proc_macro2::Ident;
 use syn::parse::Parse;
 
 use crate::explicit_types::Type;
@@ -206,31 +206,6 @@ impl ToTokens for SIRNode {
             SIRNode::FuncLike(f) => quote!(#f),
         };
         stream.extend(toks);
-    }
-}
-
-// just do loop/recur like clojure
-// trace down from loop
-// unconditionally return
-// top level and bottom level function
-
-fn trampoline() {
-    // we call it
-    // then inside we know what we return because it's inside the recur
-    //
-    let x = 0;
-    let y = 0;
-    let z = 0;
-    let mut cont = true;
-    let maybe = true;
-    while !cont {
-        cont = false;
-        let x = if maybe {
-            "HMM"
-        } else {
-            cont = true;
-            continue;
-        };
     }
 }
 
