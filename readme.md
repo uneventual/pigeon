@@ -1,4 +1,6 @@
-silly little lisp
+# Pigeon
+
+a silly little lisp, implemented in rust proc macros!
 
 very work in progress
 
