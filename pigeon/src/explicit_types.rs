@@ -1,8 +1,6 @@
 use std::fmt::Write;
 
-use crate::parse::{IfBlock, SIRNode};
 use quote::ToTokens;
-use syn::{parse::Parse, Token};
 
 impl std::fmt::Debug for TypesList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -46,40 +44,8 @@ impl std::fmt::Debug for Type {
 #[derive(Clone)]
 pub struct TypesList(pub Vec<Type>);
 
-impl Parse for TypesList {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut types: Vec<Type> = vec![];
-        while let Ok(p) = input.parse() {
-            types.push(p);
-        }
-        Ok(TypesList(types))
-    }
-}
-
-impl Parse for IfBlock {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.peek(Token![if]) {
-            let _ = input.parse::<Token![if]>();
-        }
-        let predicate = Box::new(input.parse::<SIRNode>()?);
-        let true_branch = Box::new(input.parse::<SIRNode>()?);
-        let false_branch = Box::new(input.parse::<SIRNode>()?);
-        Ok(IfBlock {
-            predicate,
-            true_branch,
-            false_branch,
-        })
-    }
-}
-
 #[derive(Clone)]
 pub struct Type(pub syn::Type);
-
-impl Parse for Type {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        Ok(Type(input.parse()?))
-    }
-}
 
 #[cfg(test)]
 mod tests {

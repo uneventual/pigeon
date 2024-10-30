@@ -224,6 +224,38 @@ impl Parse for Func {
     }
 }
 
+impl Parse for crate::explicit_types::Type {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Ok(crate::explicit_types::Type(input.parse()?))
+    }
+}
+
+impl Parse for TypesList {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut types: Vec<crate::explicit_types::Type> = vec![];
+        while let Ok(p) = input.parse() {
+            types.push(p);
+        }
+        Ok(TypesList(types))
+    }
+}
+
+impl Parse for IfBlock {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(Token![if]) {
+            let _ = input.parse::<Token![if]>();
+        }
+        let predicate = Box::new(input.parse::<SIRNode>()?);
+        let true_branch = Box::new(input.parse::<SIRNode>()?);
+        let false_branch = Box::new(input.parse::<SIRNode>()?);
+        Ok(IfBlock {
+            predicate,
+            true_branch,
+            false_branch,
+        })
+    }
+}
+
 impl Parse for FuncLike {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
         if input.peek(Token![fn]) {
