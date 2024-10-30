@@ -5,19 +5,19 @@ use proc_macro2::{Group, Ident, TokenStream, TokenTree};
 use quote::ToTokens;
 use syn::parse::discouraged::Speculative;
 use syn::parse::{self, Parse};
-use syn::{parse2, Token, Type};
+use syn::{parse2, LitFloat, LitInt, Token, Type};
 
 use proc_macro2::Literal;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum SIRNode {
     Ident(TokenStream),
-    Literal(Literal),
+    Literal(syn::Lit),
     Ref(Box<SIRNode>),
     FuncLike(FuncLike),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum FuncLike {
     FuncDef(FuncDef),
     LetBlock(LetBlock),
@@ -27,10 +27,10 @@ pub enum FuncLike {
     RecurBlock(RecurBlock),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LoopBlock(pub LetBlock);
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RecurBlock(pub LetAssignments);
 
 impl Parse for RecurBlock {
@@ -61,7 +61,7 @@ impl From<LoopBlock> for LetBlock {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct IfBlock {
     pub predicate: Box<SIRNode>,
     pub true_branch: Box<SIRNode>,
@@ -107,6 +107,14 @@ impl Parse for SIRNode {
             input.parse::<Token![&]>()?;
             return Ok(SIRNode::Ref(Box::new(input.parse::<SIRNode>()?)));
         }
+        if input.peek(Token![-]) && input.peek2(LitInt) {
+            let int = input.parse::<LitInt>()?;
+            return Ok(SIRNode::Literal(syn::Lit::Int(int)));
+        }
+        if input.peek(Token![-]) && input.peek2(LitFloat) {
+            let fl = input.parse::<LitFloat>()?;
+            return Ok(SIRNode::Literal(syn::Lit::Float(fl)));
+        }
 
         let fork = input.fork();
         let tt_parsed = input.parse::<TokenTree>()?;
@@ -120,7 +128,7 @@ impl Parse for SIRNode {
                 Ok(SIRNode::Ident(typestring))
             }
             TokenTree::Punct(_) => Err(input.error("punctuation not allowed here")),
-            TokenTree::Literal(l) => Ok(SIRNode::Literal(l.clone())),
+            TokenTree::Literal(l) => Ok(SIRNode::Literal(syn::Lit::Verbatim(l.clone()))),
         }?)
     }
 }
@@ -231,5 +239,11 @@ mod tests {
         let parsed = parse2::<FuncDef>(group.stream());
 
         assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn parse_numbers() {
+        let quoth = quote!(-1);
+        let parseg = parse2::<LitInt>(quoth).unwrap();
     }
 }

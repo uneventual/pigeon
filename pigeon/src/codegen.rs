@@ -19,7 +19,7 @@ impl ToTokens for Func {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct FuncDef {
     pub body: Vec<SIRNode>,
     pub signature: FuncSig,
@@ -31,20 +31,20 @@ pub struct FuncSig {
     pub args: Vec<(String, Type)>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LetBlock {
     pub assignments: LetAssignments,
     pub body: Vec<SIRNode>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LetAssignment {
     pub mutable: bool,
     pub name: String,
     pub val: SIRNode,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LetAssignments(pub Vec<LetAssignment>);
 
 impl Parse for LetAssignments {
@@ -235,7 +235,7 @@ fn trampoline() {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Func {
     pub name: TokenStream,
     pub args: Vec<SIRNode>,
