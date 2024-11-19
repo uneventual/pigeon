@@ -53,4 +53,6 @@ fn main() {
 
     let res = pigeon!((loop [a 0] (if (leq a 10000)  (recur [a (add a 1)]) a)));
     assert_eq!(res, 10001);
+
+    // let len = pigeon!((. five len));
 }

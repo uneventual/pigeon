@@ -3,7 +3,7 @@ use proc_macro2::token_stream::TokenStream;
 use crate::explicit_types::Type;
 
 use crate::parse::{
-    FuncLike, IfBlock, LetAssignment, LetAssignments, LoopBlock, RecurBlock, SIRNode,
+    FuncLike, IfBlock, LetAssignment, LetAssignments, LoopBlock, MethodBlock, RecurBlock, SIRNode,
 };
 use quote::{format_ident, quote, ToTokens};
 use std::fmt::Debug;
@@ -145,6 +145,15 @@ impl ToTokens for RecurBlock {
     }
 }
 
+impl ToTokens for MethodBlock {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let ms = self.method_self.clone();
+        let method = self.method.clone();
+        let args = self.args.clone();
+        tokens.extend(quote!(#ms.#method(#(#args),*)));
+    }
+}
+
 impl ToTokens for FuncLike {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let toks = match self {
@@ -156,6 +165,7 @@ impl ToTokens for FuncLike {
                 quote!(#l)
             }
             FuncLike::RecurBlock(r) => quote!(#r),
+            FuncLike::MethodBlock(mb) => quote!(#mb),
         };
         tokens.extend(toks);
     }

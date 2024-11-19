@@ -23,6 +23,14 @@ pub enum FuncLike {
     IfBlock(IfBlock),
     LoopBlock(LoopBlock),
     RecurBlock(RecurBlock),
+    MethodBlock(MethodBlock),
+}
+
+#[derive(Clone)]
+pub struct MethodBlock {
+    pub method: Type,
+    pub method_self: Box<SIRNode>,
+    pub args: Vec<SIRNode>,
 }
 
 #[derive(Clone)]
@@ -256,6 +264,27 @@ impl Parse for IfBlock {
     }
 }
 
+impl Parse for MethodBlock {
+    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        input.parse::<Token![.]>()?;
+
+        let method_self = Box::new(input.parse::<SIRNode>()?);
+        let method = input.parse::<Type>()?;
+
+        let mut args = vec![];
+
+        while let Ok(arg) = input.parse::<SIRNode>() {
+            args.push(arg);
+        }
+
+        Ok(MethodBlock {
+            method,
+            method_self,
+            args,
+        })
+    }
+}
+
 impl Parse for FuncLike {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
         if input.peek(Token![fn]) {
@@ -265,7 +294,6 @@ impl Parse for FuncLike {
         }
         if input.peek(Token![let]) {
             let fl = input.parse::<LetBlock>();
-
             let fl = FuncLike::LetBlock(fl?);
             return Ok(fl);
         }
@@ -277,6 +305,11 @@ impl Parse for FuncLike {
         if input.peek(Token![loop]) {
             let fl = input.parse::<LoopBlock>();
             let fl = FuncLike::LoopBlock(fl?);
+            return Ok(fl);
+        }
+        if input.peek(Token![.]) {
+            let fl = input.parse::<MethodBlock>();
+            let fl = FuncLike::MethodBlock(fl?);
             return Ok(fl);
         }
         let fork = input.fork();

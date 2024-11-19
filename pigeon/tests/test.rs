@@ -1,3 +1,4 @@
+use itertools::assert_equal;
 use pigeon::pigeon;
 
 fn add(a: i32, b: i32) -> i32 {
@@ -79,4 +80,18 @@ fn test_if() {
     assert_eq!(five_oh, 5);
     let oh_no = pigeon!((if (always_true)  (add (mul 3 2) 1) 0));
     assert_eq!(oh_no, 7);
+}
+
+#[test]
+fn test_method_calling() {
+    let mut five = vec![0; 5];
+    let two = vec![0; 2];
+
+    let len = pigeon!((. five len));
+    assert_eq!(len, 5);
+
+    pigeon!((. five extend two));
+
+    let len = pigeon!((. five len));
+    assert_eq!(len, 7);
 }
