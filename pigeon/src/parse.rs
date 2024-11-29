@@ -24,6 +24,7 @@ pub enum FuncLike {
     LoopBlock(LoopBlock),
     RecurBlock(RecurBlock),
     MethodBlock(MethodBlock),
+    AwaitBlock(Box<SIRNode>),
 }
 
 #[derive(Clone)]
@@ -184,8 +185,18 @@ impl Parse for LetAssignment {
     }
 }
 
+// needs async/await
 impl Parse for FuncDef {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+        let mut is_async = false;
+        let fork = input.fork();
+        if let Ok(id) = fork.parse::<Ident>() {
+            println!("{}", id);
+            if id == "async_fn" {
+                input.advance_to(&fork);
+                is_async = true;
+            }
+        }
         if input.peek(Token![fn]) {
             let _ = input.parse::<Token![fn]>()?;
         }
@@ -203,6 +214,7 @@ impl Parse for FuncDef {
             .ok_or_else(|| input.error("needs at least a return type"))?;
 
         Ok(FuncDef {
+            is_async,
             body,
             signature: FuncSig {
                 return_type: last.clone(),
@@ -312,8 +324,19 @@ impl Parse for FuncLike {
             let fl = FuncLike::MethodBlock(fl?);
             return Ok(fl);
         }
+        if input.peek(Token![await]) {
+            input.parse::<Token![await]>()?;
+            let fl = Box::new(input.parse::<SIRNode>()?);
+            let fl = FuncLike::AwaitBlock(fl);
+            return Ok(fl);
+        }
         let fork = input.fork();
         if let Ok(id) = fork.parse::<Ident>() {
+            if id == "async_fn" {
+                let fl = input.parse::<FuncDef>();
+                let fl = FuncLike::FuncDef(fl?);
+                return Ok(fl);
+            }
             if id == "recur" {
                 input.advance_to(&fork);
                 return Ok(FuncLike::RecurBlock(input.parse::<RecurBlock>()?));

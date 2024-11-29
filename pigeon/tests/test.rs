@@ -1,4 +1,4 @@
-use itertools::assert_equal;
+#![feature(async_closure)]
 use pigeon::pigeon;
 
 fn add(a: i32, b: i32) -> i32 {
@@ -94,4 +94,17 @@ fn test_method_calling() {
 
     let len = pigeon!((. five len));
     assert_eq!(len, 7);
+
+    let hello = "hello".to_string();
+    let hello = hello.chars();
+
+    let hello = pigeon! {(. (. hello into_iter) collect::<String>) };
+    println!("{}", hello);
+}
+
+#[tokio::test]
+async fn test_async_defn() {
+    let asy = { pigeon! ((async_fn [] [i32] 3)) };
+    let asy_result = pigeon!((await (asy)));
+    assert_eq!(asy_result, 3);
 }

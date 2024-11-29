@@ -20,6 +20,7 @@ impl ToTokens for Func {
 
 #[derive(Clone)]
 pub struct FuncDef {
+    pub is_async: bool,
     pub body: Vec<SIRNode>,
     pub signature: FuncSig,
 }
@@ -96,6 +97,12 @@ impl ToTokens for FuncDef {
             }
         };
 
+        let async_tok = quote!(async);
+
+        if self.is_async {
+            tokens.extend(async_tok);
+        }
+
         tokens.extend(func_def);
     }
 }
@@ -166,6 +173,7 @@ impl ToTokens for FuncLike {
             }
             FuncLike::RecurBlock(r) => quote!(#r),
             FuncLike::MethodBlock(mb) => quote!(#mb),
+            FuncLike::AwaitBlock(ab) => quote!(#ab.await),
         };
         tokens.extend(toks);
     }

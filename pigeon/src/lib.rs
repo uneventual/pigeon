@@ -1,3 +1,4 @@
+#![feature(async_closure)]
 extern crate proc_macro;
 
 use parse::SIRNode;
