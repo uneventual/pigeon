@@ -23,14 +23,14 @@ fn test_let() {
 
 #[test]
 fn test_defn() {
-    let add_and_mul = pigeon!((fn [a b] [i32 i32 i32] (mul a (add b 1))) );
+    let add_and_mul = pigeon!((fn a i32 b i32 -> i32 (mul a (add b 1))) );
     let res = pigeon!((add_and_mul 7 10));
     assert_eq!(77, res);
 }
 
 #[test]
 fn more_defn() {
-    let blah = pigeon! {(fn [a b] [&&&&&std::collections::VecDeque<i32> i32 i32] (add 1 2))};
+    let blah = pigeon! {(fn a &&&&&std::collections::VecDeque<i32> b i32 -> i32 (add 1 2))};
     let col = std::collections::VecDeque::<i32>::new();
     let x = pigeon!((blah &&&&&col 5i32));
     assert_eq!(x, 3);
@@ -48,7 +48,7 @@ fn always_true() -> bool {
 
 #[test]
 fn test_calling_inline_function() {
-    let res = pigeon!(( (fn [a b] [i32 i32 i32] (mul a (add b 1))) 7 10 ));
+    let res = pigeon!(( (fn a i32 b i32 -> i32 (mul a (add b 1))) 7 10 ));
     assert_eq!(77, res);
 }
 
@@ -102,9 +102,22 @@ fn test_method_calling() {
     println!("{}", hello);
 }
 
+#[test]
+fn test_bare_closure() {
+    let three = pigeon!((fn 3));
+    assert_eq!(three(), 3);
+}
+
+#[tokio::test]
+async fn test_bare_async_closure() {
+    let three = pigeon!((fn (async 3)));
+    let three = pigeon!((await(three)));
+    assert_eq!(three, three);
+}
+
 #[tokio::test]
 async fn test_async_defn() {
-    let asy = { pigeon! ((async_fn [] [i32] 3)) };
+    let asy = { pigeon! ((async_fn -> i32 3)) };
     let asy_result = pigeon!((await (asy)));
     assert_eq!(asy_result, 3);
 }

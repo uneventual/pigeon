@@ -25,6 +25,7 @@ pub enum FuncLike {
     RecurBlock(RecurBlock),
     MethodBlock(MethodBlock),
     AwaitBlock(Box<SIRNode>),
+    AsyncBlock(Box<SIRNode>),
 }
 
 #[derive(Clone)]
@@ -140,19 +141,6 @@ impl Parse for SIRNode {
     }
 }
 
-struct IdentList(Vec<String>);
-
-impl Parse for IdentList {
-    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
-        let mut idents = Vec::new();
-        while !input.is_empty() {
-            let id = input.parse::<Ident>()?;
-            idents.push(id.to_string())
-        }
-        Ok(IdentList(idents))
-    }
-}
-
 #[derive(Clone)]
 pub struct LetAssignment {
     pub mutable: bool,
@@ -197,33 +185,43 @@ impl Parse for FuncDef {
                 is_async = true;
             }
         }
+
         if input.peek(Token![fn]) {
-            let _ = input.parse::<Token![fn]>()?;
+            input.parse::<Token![fn]>()?;
         }
-        let argslist = parse2::<IdentList>(input.parse::<Group>()?.stream())?;
-        let typeslist = parse2::<TypesList>(input.parse::<Group>()?.stream())?;
+
+        // we want users to be able to omit these and end up with nones
+        // actually just consume them
+        let argsfork = input.fork();
+        let mut args: Vec<(String, crate::explicit_types::Type)> = vec![];
+        loop {
+            let id = argsfork.parse::<Ident>();
+            let typename = argsfork.parse::<crate::explicit_types::Type>();
+
+            if id.is_err() || typename.is_err() {
+                break;
+            }
+            input.advance_to(&argsfork);
+            args.push((id?.to_string(), typename?));
+        }
+        let return_type = if input.peek(Token![-]) && input.peek2(Token![>]) {
+            input.parse::<Token![-]>()?;
+            input.parse::<Token![>]>()?;
+            let ty = input.parse::<crate::explicit_types::Type>()?;
+            Some(ty)
+        } else {
+            None
+        };
+
         let mut body = vec![];
 
         while let Ok(n) = input.parse::<SIRNode>() {
             body.push(n);
         }
-
-        let (last, rest) = typeslist
-            .0
-            .split_last()
-            .ok_or_else(|| input.error("needs at least a return type"))?;
-
         Ok(FuncDef {
             is_async,
             body,
-            signature: FuncSig {
-                return_type: last.clone(),
-                args: argslist
-                    .0
-                    .into_iter()
-                    .zip(rest.iter().cloned())
-                    .collect_vec(),
-            },
+            signature: FuncSig { return_type, args },
         })
     }
 }
@@ -328,6 +326,12 @@ impl Parse for FuncLike {
             input.parse::<Token![await]>()?;
             let fl = Box::new(input.parse::<SIRNode>()?);
             let fl = FuncLike::AwaitBlock(fl);
+            return Ok(fl);
+        }
+        if input.peek(Token![async]) {
+            input.parse::<Token![async]>()?;
+            let fl = Box::new(input.parse::<SIRNode>()?);
+            let fl = FuncLike::AsyncBlock(fl);
             return Ok(fl);
         }
         let fork = input.fork();

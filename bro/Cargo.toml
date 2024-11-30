@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+axum = { version = "0.7.9", features = ["macros"] }
+tokio = { version = "^1.36", features = ["full"] }
 pigeon = { version = "0.1.0", path = "../pigeon" }

@@ -27,7 +27,7 @@ pub struct FuncDef {
 
 #[derive(Clone, Debug)]
 pub struct FuncSig {
-    pub return_type: Type,
+    pub return_type: Option<Type>,
     pub args: Vec<(String, Type)>,
 }
 
@@ -91,19 +91,30 @@ impl ToTokens for FuncDef {
         let return_type = &self.signature.return_type;
         let body = &self.body;
 
-        let func_def = quote! {
-            |#(#args),*| -> #return_type {
+        let args = quote! {
+        |#(#args),*|};
+
+        let rettype = if let Some(rt) = return_type {
+            quote!(-> #rt)
+        } else {
+            quote!()
+        };
+
+        let block = quote! {
+             {
                 #(#body)*
             }
         };
 
-        let async_tok = quote!(async);
+        let optionally_async = if self.is_async {
+            quote!(async)
+        } else {
+            quote!()
+        };
 
-        if self.is_async {
-            tokens.extend(async_tok);
-        }
+        let closure = quote! {#optionally_async #args  #rettype #block};
 
-        tokens.extend(func_def);
+        tokens.extend(closure);
     }
 }
 
@@ -173,7 +184,8 @@ impl ToTokens for FuncLike {
             }
             FuncLike::RecurBlock(r) => quote!(#r),
             FuncLike::MethodBlock(mb) => quote!(#mb),
-            FuncLike::AwaitBlock(ab) => quote!(#ab.await),
+            FuncLike::AwaitBlock(ab) => quote!({#ab}.await),
+            FuncLike::AsyncBlock(sirnode) => quote!(async {#sirnode}),
         };
         tokens.extend(toks);
     }
